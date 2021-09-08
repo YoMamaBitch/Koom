@@ -32,6 +32,20 @@ class Music(commands.Cog):
         else:
             await self._playSong(pCtx)
 
+    @commands.command(aliases=['queue', 'q'])
+    async def _queue(self,pCtx):
+        if not self.voice:
+            await pCtx.send("I'm not in a chat cunt")
+            return
+        embed = discord.Embed()
+        queueList = ''
+        counter = 0
+        for item in self.queue:
+            queueList += '**' + str(counter) + '**' + '. ' + item['title'] + '\n'
+            counter += 1
+        embed.add_field(name='Queue', value=queueList)
+        await pCtx.send(embed=embed)
+
     @commands.command(name='resume')
     async def _resume(self,pCtx):
         self.voice = discord.utils.get(self.bot.voice_clients, guild=pCtx.guild)
@@ -72,6 +86,8 @@ class Music(commands.Cog):
         try:
             if self.voice.is_connected():
                 await self.voice.disconnect()
+                self.voice = None
+                self.ctx = None
             else:
                 await pCtx.send("Koom not in a voice chat!")
         except:
@@ -88,13 +104,15 @@ class Music(commands.Cog):
         if len(self.queue) > 0:
             if not self.bReachedEnd or self.bLoop:
                 prevSongTitle = self.queue[self.pointer]['title']
-                self.incrementPointer(self)
+                if self.pointer < len(self.queue)-1:
+                    self._incrementPointer()
                 try:
                     self.voice.stop()
                 except:
                     return False
             await pCtx.send("Skipped song: " + prevSongTitle)
             await self._playSong(pCtx)
+            await pCtx.send("Now playing: " + self.queue[self.pointer]['title'])
     
     def _incrementPointer(self):
         self.pointer += 1
@@ -134,7 +152,7 @@ class Music(commands.Cog):
         try:
             self.voice.play(discord.FFmpegPCMAudio(self.queue[self.pointer]['hostURL'], **FFMPEG_OPTIONS))    
         except Exception as e:
-            await pCtx.send('Error: ' + str(e))
+            #await pCtx.send('Error: ' + str(e))
             return False
 
     @commands.command(name='help')
