@@ -1,0 +1,8 @@
+bruh Play URL -- Plays URL of a Youtube Video 
+bruh Play TITLE -- Searches Youtube for Video with specified Title 
+bruh Skip -- Skips song
+bruh LQ/LoopQueue -- Loops the current queue
+bruh dc/Disconnect -- Disconnects bot
+bruh stop -- Stops song
+bruh resume -- Starts song 
+bruh pause -- Pauses song
