@@ -14,6 +14,16 @@ class Music(commands.Cog):
         self.queue = []
         self.bReachedEnd = False
         self.bLoop = False
+        
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):   
+        if before.channel is not None and after.channel is None:
+            self.queue = []
+            self.pointer = -1
+            self.voice = None
+            self.bLoop = False
+            self.bReachedEnd = False
+
     
     @commands.command(aliases=['play','p'])
     async def _play(self, pCtx, *inputStr : str):
@@ -21,15 +31,19 @@ class Music(commands.Cog):
             await pCtx.send("You are not in a voice chat!")
             return
         else:
+            print(self.pointer)
             await self._summon(pCtx)
             request = ' '.join(inputStr)
             await self._enqueue(pCtx, request)
+            print(self.pointer)
         if not pCtx.message.author.voice:
             await pCtx.send("You are not in a voice chat")
         elif pCtx.message.author.voice.channel.id is not self.voice.channel.id and self.voice is not None:
             await pCtx.send("Bot is in use in another chat!")
         else:
+            print(self.pointer)
             self._playSong(pCtx)
+            print(self.pointer)
 
     @commands.command(name='remove')
     async def _remove(self, pCtx, args):
@@ -70,7 +84,10 @@ class Music(commands.Cog):
             queueList += ' | Request by: ' + item['author'] + '\n'
             counter += 1
         embed.add_field(name='Queue', value=queueList)
-        await pCtx.send(embed=embed)
+        if queueList == '':
+            await pCtx.send("There is nothing in the queue!")
+        else:
+            await pCtx.send(embed=embed)
 
     @commands.command(name='resume')
     async def _resume(self,pCtx):
