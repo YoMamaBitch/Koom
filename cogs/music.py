@@ -20,9 +20,7 @@ class Music(commands.Cog):
             await pCtx.send("You are not in a voice chat!")
             return
         else:
-            if self.voice is None:
-                await self._connect(pCtx)
-                self.ctx = pCtx
+            await self._summon(pCtx)
             request = ' '.join(inputStr)
             await self._enqueue(pCtx, request)
         if not pCtx.message.author.voice:
@@ -31,6 +29,12 @@ class Music(commands.Cog):
             await pCtx.send("Bot is in use in another chat!")
         else:
             await self._playSong(pCtx)
+
+    @commands.command(aliases=['join','summon'])
+    async def _summon(self, pCtx):
+        if self.voice is None:
+            await self._connect(pCtx)
+            self.ctx = pCtx
 
     @commands.command(aliases=['queue', 'q'])
     async def _queue(self,pCtx):
@@ -41,7 +45,9 @@ class Music(commands.Cog):
         queueList = ''
         counter = 0
         for item in self.queue:
-            queueList += '**' + str(counter) + '**' + '. ' + item['title'] + '\n'
+            queueList += '**' + str(counter) + '**' + '. '
+            queueList += f"[{item['title']}]({item['webpage_url']})"
+            queueList += ' | Request by: ' + item['author'] + '\n'
             counter += 1
         embed.add_field(name='Queue', value=queueList)
         await pCtx.send(embed=embed)
@@ -133,13 +139,21 @@ class Music(commands.Cog):
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             if inputStr.startswith('http'):
                 info = ydl.extract_info(inputStr, download=False)
-                entry = {'title' : info['title'], 'hostURL' : info['url'], 'webpage_url' : info['webpage_url']}
+                entry = {
+                    'title' : info['title'], 
+                    'hostURL' : info['url'], 
+                    'webpage_url' : info['webpage_url'],
+                    'author' : pCtx.message.author.display_name}
                 self.queue.append(entry)
                 await pCtx.send(successMsg + "%s" % entry['title'] + "\n(%s)" % entry['webpage_url'])
             else:
                 try:
                     info = ydl.extract_info("ytsearch:%s" % inputStr, download=False)['entries'][0]
-                    entry = {'title' : info['title'], 'hostURL' : info['url'], 'webpage_url' : info['webpage_url']}
+                    entry = {
+                    'title' : info['title'], 
+                    'hostURL' : info['url'], 
+                    'webpage_url' : info['webpage_url'],
+                    'author' : pCtx.message.author.display_name}
                     self.queue.append(entry)
                     await pCtx.send(successMsg + "%s" % entry['title'] + "\n(%s)" % entry['webpage_url'])
                 except Exception as e:
