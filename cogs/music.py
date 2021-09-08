@@ -1,3 +1,4 @@
+import asyncio
 import discord
 from discord.ext import commands
 from discord.ext.commands.core import command
@@ -28,10 +29,29 @@ class Music(commands.Cog):
         elif pCtx.message.author.voice.channel.id is not self.voice.channel.id and self.voice is not None:
             await pCtx.send("Bot is in use in another chat!")
         else:
-            await self._playSong(pCtx)
+            self._playSong(pCtx)
+
+    @commands.command(name='remove')
+    async def _remove(self, pCtx, args):
+        try:
+            posToRemove = int(args)
+        except:
+            await pCtx.send("Enter a valid integer")
+            return
+            
+        if self.pointer == posToRemove:
+            await self._skip(pCtx)
+        if self.pointer >= posToRemove:
+            self.pointer-=1
+        itemRemoved = self.queue.pop(posToRemove)
+        await pCtx.send("Removed: " + itemRemoved['title'])
+
 
     @commands.command(aliases=['join','summon'])
     async def _summon(self, pCtx):
+        if not pCtx.message.author.voice:
+            await pCtx.send("You're not in a voice channel cunt")
+            return
         if self.voice is None:
             await self._connect(pCtx)
             self.ctx = pCtx
@@ -108,17 +128,23 @@ class Music(commands.Cog):
             await pCtx.send("Koom is not in a chat!")
             return False
         if len(self.queue) > 0:
+            prevSongTitle = self.queue[self.pointer]['title']
+            self._incrementPointer()
             if not self.bReachedEnd or self.bLoop:
-                prevSongTitle = self.queue[self.pointer]['title']
-                if self.pointer < len(self.queue)-1:
-                    self._incrementPointer()
                 try:
                     self.voice.stop()
                 except:
                     return False
-            await pCtx.send("Skipped song: " + prevSongTitle)
-            await self._playSong(pCtx)
-            await pCtx.send("Now playing: " + self.queue[self.pointer]['title'])
+                await pCtx.send(f"Skipped song: [{prevSongTitle}]")
+                self._playSong(pCtx)
+                currSongTitle = self.queue[self.pointer]['title']
+                await pCtx.send(f"Now playing: [{currSongTitle}]")
+                return
+            try:
+                self.voice.stop()
+            except:
+                return False
+            await pCtx.send("Reached end of queue!")
     
     def _incrementPointer(self):
         self.pointer += 1
@@ -161,13 +187,18 @@ class Music(commands.Cog):
                     return False
 
     
-    async def _playSong(self,pCtx):
+    def _playSong(self,pCtx):
         FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
         try:
-            self.voice.play(discord.FFmpegPCMAudio(self.queue[self.pointer]['hostURL'], **FFMPEG_OPTIONS))    
+            self.voice.play(discord.FFmpegPCMAudio(self.queue[self.pointer]['hostURL'], **FFMPEG_OPTIONS), after=lambda e: self.after_song(pCtx))    
         except Exception as e:
             #await pCtx.send('Error: ' + str(e))
             return False
+
+    def after_song(self, pCtx):
+        self._incrementPointer()
+        if not self.bReachedEnd or self.bLoop:
+            self._playSong(pCtx)
 
     @commands.command(name='help')
     async def _helpMenu(self,pCtx):
@@ -178,7 +209,7 @@ class Music(commands.Cog):
                 helpCommands += line.split('--')[0] + '\n'
                 helpExplanation += line.split('--')[1]
 
-        embed = discord.Embed(title="Scuffed Help V0.2", color=0xe0e0e0)
+        embed = discord.Embed(title="Scuffed Help V0.3", color=0xe0e0e0)
         embed.add_field(name='Commands', value=helpCommands)
         embed.add_field(name='\u200b', value=helpExplanation)
         embed.add_field(name='\u200b', value="Again, it's not even remotely close to being done so there's a lot of commands missing... Bite me.", inline=False)

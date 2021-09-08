@@ -1,7 +1,10 @@
+bruh summon -- Summons bot to voice channel
 bruh Play URL -- Plays URL of a Youtube Video 
 bruh Play TITLE -- Searches Youtube for Video with specified Title 
 bruh Skip -- Skips song
+bruh remove X -- Removes X song from queue
 bruh LQ/LoopQueue -- Loops the current queue
+bruh q/queue -- Displays queue
 bruh dc/Disconnect -- Disconnects bot
 bruh stop -- Stops song
 bruh resume -- Starts song 
