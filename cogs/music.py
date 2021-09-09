@@ -1,7 +1,6 @@
 import asyncio
 import discord
 from discord.ext import commands
-from discord.ext.commands.core import command
 import youtube_dl
 
 class Music(commands.Cog):
@@ -19,7 +18,7 @@ class Music(commands.Cog):
     async def on_voice_state_update(self, member, before, after):   
         if before.channel is not None and after.channel is None:
             self.queue = []
-            self.pointer = -1
+            self.pointer = 0
             self.voice = None
             self.bLoop = False
             self.bReachedEnd = False
@@ -31,19 +30,15 @@ class Music(commands.Cog):
             await pCtx.send("You are not in a voice chat!")
             return
         else:
-            print(self.pointer)
             await self._summon(pCtx)
             request = ' '.join(inputStr)
             await self._enqueue(pCtx, request)
-            print(self.pointer)
         if not pCtx.message.author.voice:
             await pCtx.send("You are not in a voice chat")
         elif pCtx.message.author.voice.channel.id is not self.voice.channel.id and self.voice is not None:
             await pCtx.send("Bot is in use in another chat!")
         else:
-            print(self.pointer)
             self._playSong(pCtx)
-            print(self.pointer)
 
     @commands.command(name='remove')
     async def _remove(self, pCtx, args):
@@ -146,7 +141,6 @@ class Music(commands.Cog):
             return False
         if len(self.queue) > 0:
             prevSongTitle = self.queue[self.pointer]['title']
-            self._incrementPointer()
             if not self.bReachedEnd or self.bLoop:
                 try:
                     self.voice.stop()
