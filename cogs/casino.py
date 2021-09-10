@@ -3,6 +3,7 @@ from sys import path
 import discord
 from discord.ext import commands
 import motor.motor_asyncio
+import random
 
 
 
@@ -12,6 +13,36 @@ class Casino(commands.Cog):
         self.players = []
         self.bot.mongo = motor.motor_asyncio.AsyncIOMotorClient(str(secret))
         self.bot.db = self.bot.mongo.userdata
+
+    @commands.command(name='coinflip')
+    async def cf(self, pCtx, amount, guess):
+        headsList = ['heads','head','ct']
+        tailsList = ['tails','tail','t']
+        uID = pCtx.message.author.id
+        try:
+            gambler = await self.bot.db.koomdata.find_one({'_uid' : uID})
+        except:
+            return
+        if gambler['_currency'] < int(amount):
+            await pCtx.send("Not enough money to bet")
+            return
+        await pCtx.send("Starting flip:")
+        await asyncio.sleep(random.randrange(2,5))
+        outcome = random.choice([0,1])
+        winner = False
+        if outcome == 0 and guess in headsList:
+            await pCtx.send("You Win! - New Bal: %s" % str(gambler['_currency'] + int(amount)))
+            winner = True
+        elif outcome == 1 and guess in tailsList:
+            await pCtx.send("You win! - New Bal: %s" % str(gambler['_currency'] + int(amount)))
+            winner = True
+        else:
+            await pCtx.send("You lose - New Bal: %s" % str(gambler['_currency'] - int(amount)))
+        if winner:
+            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set': {'_currency' :  gambler['_currency'] + int(amount)}})
+        else:
+            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set': {'_currency' :  gambler['_currency'] - int(amount)}})
+
 
     @commands.command(name='pay')
     async def send(self, pCtx, amount, pTarget):
