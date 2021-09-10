@@ -14,6 +14,25 @@ class Casino(commands.Cog):
         self.bot.mongo = motor.motor_asyncio.AsyncIOMotorClient(str(secret))
         self.bot.db = self.bot.mongo.userdata
 
+
+    @commands.Cog.listener()
+    async def on_command_error(self, pCtx, error):
+        if isinstance(error, commands.CommandOnCooldown):
+            msg = '**On Cooldown!** Try again in {:.2f}s'.format(error.retry_after)
+            await pCtx.send(msg)
+
+    @commands.command()
+    @commands.cooldown(1,86400, commands.BucketType.user)
+    async def daily(self, pCtx):
+        userID = pCtx.message.author.id
+        try:
+            user = await self.bot.db.koomdata.find_one({'_uid' : userID})
+        except:
+            return
+        amount = random.randrange(25,85)
+        self.bot.db.koomdata.update_one({'_uid':user['_uid']}, {'$set': {'_currency' :  user['_currency'] + int(amount)}})
+        await pCtx.send("You've claimed £%s as your daily!" % int(amount))            
+
     @commands.command(name='coinflip')
     async def cf(self, pCtx, amount, guess):
         headsList = ['heads','head','ct']
@@ -42,7 +61,6 @@ class Casino(commands.Cog):
             self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set': {'_currency' :  gambler['_currency'] + int(amount)}})
         else:
             self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set': {'_currency' :  gambler['_currency'] - int(amount)}})
-
 
     @commands.command(name='pay')
     async def send(self, pCtx, amount, pTarget):
