@@ -17,5 +17,6 @@ async def unload(ctx,extension):
 for file in os.listdir('./cogs'):
     if file.endswith('.py'):
         bot.load_extension(f'cogs.{file[:-3]}')
+        print('Loaded: %s' %f'cogs.{file[:-3]}')
 
 bot.run(secrets.discordKey)

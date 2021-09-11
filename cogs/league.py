@@ -4,8 +4,6 @@ from riotwatcher import LolWatcher, ApiError
 import secrets
 import asyncio
 
-secret = 'RGAPI-5153c113-d647-4546-a02d-81d69653054c'
-
 class League(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
