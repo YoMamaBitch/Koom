@@ -59,6 +59,7 @@ class Music(commands.Cog):
     @commands.command(aliases=['join','summon'])
     async def _summon(self, pCtx):
         if not pCtx.message.author.voice:
+            print('Not in vc')
             await pCtx.send("You're not in a voice channel cunt")
             return
         if self.voice is None:
@@ -169,7 +170,7 @@ class Music(commands.Cog):
         voiceChannel = self.bot.get_channel(pCtx.author.voice.channel.id)
         await voiceChannel.connect()
         self.voice = discord.utils.get(self.bot.voice_clients, guild=pCtx.guild)
-    
+
     async def _enqueue(self, pCtx, inputStr : str):
         successMsg = ":white_check_mark: Successfully Added!\n"
         ydl_opts = {'format':'bestaudio/best','postprocessors': [{'key':'FFmpegExtractAudio','preferredcodec':'mp3','preferredquality':'192'}], 'yes-playlists':True}

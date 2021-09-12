@@ -1,24 +1,94 @@
 import asyncio
 import discord
+from discord import user
 from discord.ext import commands
+from discord.ext import tasks
 import motor.motor_asyncio
 import random
 import secrets
 import time
+from bson.objectid import ObjectId
+import blackjack
+
+cards = {'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10}
 
 class Casino(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.players = []
+        self.bjSessions = []
         self.bot.mongo = motor.motor_asyncio.AsyncIOMotorClient(str(secrets.mongoKey))
         self.bot.db = self.bot.mongo.userdata
-
+        self.lottery.start()
 
     @commands.Cog.listener()
     async def on_command_error(self, pCtx, error):
         if isinstance(error, commands.CommandOnCooldown):
             msg = '**On Cooldown!** Try again in {:.2f}s'.format(error.retry_after)
             await pCtx.send(msg)
+
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction, user):
+        for game in self.bjSessions:
+            await game.update(reaction, user)
+
+    @commands.command(aliases=['joinlottery','joinl','lottery'])
+    async def joinLot(self, pCtx):
+        try:
+            player = await self.bot.db.koomdata.find_one({'_uid':pCtx.message.author.id})
+        except Exception as e:
+            print(e)
+        await self.bot.db.koomdata.update_one({'_id':ObjectId('613ce2090e01049878d07fb5')}, {'$addToSet':{'_participants':player['_uid']}})
+        await pCtx.send(":white_check_mark: You've been added to the lottery!")
+
+    @tasks.loop(seconds=0.0, minutes=30.0, hours=0, count=None)
+    async def lottery(self):
+        channel = self.bot.get_channel(secrets.casinoChannel)
+        lotteryObject = await self.bot.db.koomdata.find_one({'_id':ObjectId('613ce2090e01049878d07fb5')})
+        timelefts = int(lotteryObject['_lotteryEndTime'] - time.time())
+        if timelefts > 0:
+            embed = discord.Embed(title="Lottery!", 
+            description='All money lost to the system is returned here in this lottery, every 3 hours!', 
+            color=0xD4ADCF, footer="type 'bruh joinl' to join the lottery!")
+            amount = lotteryObject['_lotteryAmount']
+            embed.add_field(name='Current Prize', value=f'£{amount}')
+            embed.add_field(name='Time Left',value=f'{timelefts}s')
+        else:
+            ranIndex = random.randrange(-1,len(lotteryObject['_participants']))
+            ranWinner = lotteryObject['_participants'][ranIndex]
+            embed = discord.Embed(title='Lottery Results!', color=0xD4ADCF)
+            lotPrize = lotteryObject['_lotteryAmount']
+            embed.add_field(name='GrandPrize', value=f'Grand Prize: £{lotPrize}')
+            embed.add_field(name='Winner', value=f'Winner: <@{ranWinner}>')
+            winner = await self.bot.db.koomdata.find_one({'_uid':ranWinner})
+            newCurrency = winner['_currency'] + lotPrize
+            await self.bot.db.koomdata.update_one({'_uid':ranWinner}, {'$set':{'_currency':newCurrency}})
+            await self.bot.db.koomdata.update_one({'_id':ObjectId('613ce2090e01049878d07fb5')}, {'$set':{'_lotteryAmount':0}})
+            endtime = time.time() + lotteryObject['_lotteryLength']
+            await self.bot.db.koomdata.update_one({'_id':ObjectId('613ce2090e01049878d07fb5')}, {'$set':{'_lotteryEndTime':endtime}})
+            await self.bot.db.koomdata.update_one({'_id':ObjectId('613ce2090e01049878d07fb5')}, {'$set':{'_participants':[]}})
+        await channel.send(embed=embed)
+
+    @lottery.before_loop
+    async def lottery_before(self):
+        await self.bot.wait_until_ready()
+
+    @commands.command(name='takeMoney')
+    async def take(self, pCtx, amount, mention):
+        if pCtx.message.author.id != secrets.keironID:
+            await pCtx.send("Fuck off. Only Keiron can use this command")
+            return
+        if '!' in mention:
+            ID = mention[3:len(mention)-1]
+        else:
+            ID = mention[2:len(mention)-1]
+        keiron = await self.bot.db.koomdata.find_one({'_uid' : secrets.keironID})
+        user = await self.bot.db.koomdata.find_one({'_uid' : int(ID)})
+        kNewMoney = int(amount) + keiron['_currency']
+        uNewMoney = user['_currency'] - int(amount)
+        self.bot.db.koomdata.update_one({'_uid':keiron['_uid']}, {'$set': {'_currency' :  kNewMoney}})
+        self.bot.db.koomdata.update_one({'_uid':user['_uid']}, {'$set': {'_currency' :  uNewMoney}})
+        await pCtx.send(f"Keiron has robbed £{amount} from <@{ID}>")
 
     @commands.command(name='baltop')
     async def balancetop(self, pCtx):
@@ -35,7 +105,6 @@ class Casino(commands.Cog):
         embed.add_field(name='Person', value=usernames, inline=True)
         embed.add_field(name='Balance', value=money, inline=True)
         await pCtx.send(embed=embed)
-
 
     @commands.command()
     async def hourly(self, pCtx):
@@ -62,13 +131,77 @@ class Casino(commands.Cog):
         self.bot.db.koomdata.update_one({'_uid':user['_uid']}, {'$set': {'_lastClaim' :  time.time() * 1000}})
         await pCtx.send("You've claimed £%s!" % int(amount))            
 
+    async def botCoinflip(self, pCtx, gambler, guess, amount, outcome):
+        headsList = ['heads','head','ct']
+        tailsList = ['tails','tail','t']
+        oldMoney = gambler['_currency']
+        newMoneyWin = oldMoney + int(amount)
+        newMoneyLoss = oldMoney - int(amount)
+        if outcome == 0 and guess in headsList:
+            await pCtx.send("You Win! - New Bal: %s" % str(newMoneyWin))
+            winner = True
+        elif outcome == 1 and guess in tailsList:
+            await pCtx.send("You win! - New Bal: %s" % str(newMoneyWin))
+            winner = True
+        else:
+            await pCtx.send("You lose - New Bal: %s" % str(newMoneyLoss))
+            winner = False    
+        if winner:
+            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set': {'_currency' :  newMoneyWin}})
+        else:
+            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set': {'_currency' :  newMoneyLoss}})
+            lotteryObject = await self.bot.db.koomdata.find_one({'_id':ObjectId('613ce2090e01049878d07fb5')})
+            newPrize = lotteryObject['_lotteryAmount'] + int(amount)
+            self.bot.db.koomdata.update_one({'_id':ObjectId('613ce2090e01049878d07fb5')}, {'$set':{'_lotteryAmount':newPrize}})
+
+    async def vsCoinflip(self, pCtx, gambler, otherPlayer, guess, amount, outcome):
+        try:
+            if '!' in otherPlayer:
+                otherUser = await self.bot.fetch_user(otherPlayer[3:len(otherPlayer)-1])
+            else:
+                otherUser = await self.bot.fetch_user(otherPlayer[2:len(otherPlayer)-1])
+            uID = otherUser.id
+            if uID == gambler['_uid']:
+                await pCtx.send("Wait a minute el'Fucko, you can't coinflip against yourself")
+                return
+            gambler2 = await self.bot.db.koomdata.find_one({'_uid' : uID})
+        except Exception as e:
+            print(e)
+        try:
+            if int(gambler2['_currency']) < int(amount):
+                await pCtx.send('%s does not have enough money to start coinflip!' % otherUser.display_name)
+                return
+        except Exception as e:
+            print(e)
+            return
+        headsList = ['heads','head','ct']
+        tailsList = ['tails','tail','t']
+        if outcome == 0 and guess in headsList:
+            await pCtx.send('<@%s> Wins the prize pool!' % gambler['_uid'])
+            winner = gambler
+        elif outcome == 1 and guess in tailsList:
+            await pCtx.send('<@%s> Wins the prize pool!' % gambler['_uid'])
+            winner = gambler
+        else:
+            await pCtx.send('<@%s> Wins the prize pool!' % gambler2['_uid'])
+            winner = gambler2
+        if winner == gambler:
+            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set' : {'_currency' : gambler['_currency'] + int(amount)}})
+            self.bot.db.koomdata.update_one({'_uid':gambler2['_uid']}, {'$set' : {'_currency' : gambler2['_currency'] - int(amount)}})
+        else:
+            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set' : {'_currency' : gambler['_currency'] - int(amount)}})
+            self.bot.db.koomdata.update_one({'_uid':gambler2['_uid']}, {'$set' : {'_currency' : gambler2['_currency'] + int(amount)}})
+        
     @commands.command(name='coinflip')
-    async def cf(self, pCtx, amount, guess):
+    async def cf(self, pCtx, amount, guess, otherPlayer = None):
         guess = str.lower(guess)
+        if int(amount) < 0:
+            await pCtx.send("Can't bet a negative amount")
+            return
         headsList = ['heads','head','ct']
         tailsList = ['tails','tail','t']
         if guess not in headsList and guess not in tailsList:
-            await pCtx.send("Invalid input")
+            await pCtx.send("Invalid guess input")
             return
         uID = pCtx.message.author.id
         try:
@@ -77,27 +210,22 @@ class Casino(commands.Cog):
             print(e)
             return
         if gambler['_currency'] < int(amount):
-            await pCtx.send("Not enough money to bet")
+            await pCtx.send("Not enough money to start bet")
             return
         await pCtx.send("Starting flip:")
         await asyncio.sleep(random.randrange(2,5))
         outcome = random.choice([0,1])
-        winner = False
-        if outcome == 0 and guess in headsList:
-            await pCtx.send("You Win! - New Bal: %s" % str(gambler['_currency'] + int(amount)))
-            winner = True
-        elif outcome == 1 and guess in tailsList:
-            await pCtx.send("You win! - New Bal: %s" % str(gambler['_currency'] + int(amount)))
-            winner = True
+        
+        if otherPlayer == None:
+            await self.botCoinflip(pCtx, gambler, guess, amount, outcome)
         else:
-            await pCtx.send("You lose - New Bal: %s" % str(gambler['_currency'] - int(amount)))
-        if winner:
-            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set': {'_currency' :  gambler['_currency'] + int(amount)}})
-        else:
-            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set': {'_currency' :  gambler['_currency'] - int(amount)}})
+            await self.vsCoinflip(pCtx, gambler, otherPlayer, guess, amount, outcome)
 
     @commands.command(name='pay')
     async def send(self, pCtx, amount, pTarget):
+        if int(amount) < 0:
+            await pCtx.send("Can't pay a negative amount")
+            return
         userID = pCtx.message.author.id
         payer = None
         payee = None
@@ -115,14 +243,16 @@ class Casino(commands.Cog):
             await pCtx.send("Error: Couldn't find user to pay in system")
             return
         try:
-            self.bot.db.koomdata.update_one({'_uid':payer['_uid']}, {'$set': {'_currency' :  payer['_currency']-int(amount)}})
-            self.bot.db.koomdata.update_one({'_uid':payee['_uid']}, {'$set': {'_currency' :  payee['_currency']+int(amount)}})
-        except:
+            payerNew = payer['_currency'] - int(amount)
+            payeeNew = payee['_currency'] + int(amount)
+            await self.bot.db.koomdata.update_one({'_uid':payer['_uid']}, {'$set': {'_currency' : payerNew}})
+            await self.bot.db.koomdata.update_one({'_uid':payee['_uid']}, {'$set': {'_currency' :  payeeNew}})
+        except Exception as e:
+            print(e)
             await pCtx.send("Error updating balances")
             return
         await pCtx.send(":white_check_mark: Successfully Sent!")
         
-
     @commands.command(aliases=['bal','money'])
     async def balance(self, pCtx):
         userID = pCtx.message.author.id
@@ -135,26 +265,28 @@ class Casino(commands.Cog):
         embed.add_field(name='Money', value='£%s'%doc['_currency'])
         await pCtx.send(embed=embed)
 
-    @commands.command()
-    async def start(self, pCtx):
-        if pCtx.message.author.id != 241716281961742336:
-            return
-        self.bot.cursor = self.bot.db.koomdata.find({})
-        existingUsers = await self.bot.cursor.to_list(length=1000)
-        newUsers = []
-        for member in pCtx.guild.members:
-            if self.in_dict('_uid', member.id, existingUsers) == {}:
-                newUsers.append(member.id)
-            else:
-                continue
-        for user in newUsers:
-            self.bot.db.koomdata.insert_one({'_uid':user, '_currency':100})
-
     def in_dict(self, key,value,dict):
         for entry in dict:
             if entry[key] == value:
                 return entry
         return {}
+
+    @commands.command(name='blackjack')
+    async def bj(self, pCtx, amount:int):
+        if amount < 0:
+            await pCtx.send("Can't bet a negative amount")
+            return
+        ID = pCtx.message.author.id
+        user = await self.bot.db.koomdata.find_one({'_uid':int(ID)})
+        if user['_currency'] < amount:
+            await pCtx.send("You don't have enough money to gamble")
+            return
+        try:
+            game = blackjack.BlackjackGame(self.bot, pCtx.message, amount, self.bjSessions)
+        except Exception as e:
+            print(e)
+        self.bjSessions.append(game)
+        await game.start()
 
 def setup(bot):
     bot.add_cog(Casino(bot))

@@ -3,7 +3,7 @@ from discord.ext import commands
 import os
 import secrets
 
-bot = commands.Bot(command_prefix='bruh ', intents=discord.Intents().all())
+bot = commands.Bot(command_prefix='bruh ', intents=discord.Intents().all(), case_insensitive=True)
 bot.remove_command('help')
 
 @bot.command()
