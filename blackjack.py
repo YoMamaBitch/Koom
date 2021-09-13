@@ -8,10 +8,11 @@ from bson.objectid import ObjectId
 import secrets
 import random
 
-playingCards = {'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
-                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
-                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
-                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10}
+#playingCards = {'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
+#                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
+#                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
+#                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10}
+playingCards = {'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10}
 
 class BlackjackGame():
     def __init__(self, bot, message, amount:int, bjSessions):
@@ -52,10 +53,7 @@ class BlackjackGame():
         text = self.dealerhand[0]
         embed.add_field(name='Dealer First Card:',value=text, inline=False)
         embed.add_field(name='Your Hand:',value=f'{hand}')
-        msg = await self.message.channel.send(embed=embed)
-        self.message = msg
-        await msg.add_reaction('🇸')
-        await msg.add_reaction('🇭')
+        await self.message.edit(embed=embed)
 
     async def standPlayer(self):
         while self.valueOfHand(self.dealerhand) < 17:
@@ -88,7 +86,7 @@ class BlackjackGame():
         embed = discord.Embed(title="It's a draw!", color=0x2F1847)
         embed.add_field(name='Dealer Hand:',value=self.getHandString(self.dealerhand),inline=False)
         embed.add_field(name='Player Hand:',value=self.getHandString(self.playerhand))
-        await self.messageChannel.send(embed=embed)
+        await self.message.edit(embed=embed)
         self.sessions.remove(self)
 
     async def playerLose(self):
@@ -101,7 +99,7 @@ class BlackjackGame():
         playerHand = self.getHandString(self.playerhand)
         embed.add_field(name='Dealer Hand:',value=dealerHand)
         embed.add_field(name='Your Hand: ',value=playerHand,inline=False)
-        await self.messageChannel.send(embed=embed)
+        await self.message.edit(embed=embed)
         self.sessions.remove(self)
 
     async def playerWin(self):
@@ -111,7 +109,7 @@ class BlackjackGame():
         embed = discord.Embed(title='You win!', color=0x81E979)
         embed.add_field(name='Dealer Hand:',value=self.getHandString(self.dealerhand))
         embed.add_field(name='Your Hand: ',value=self.getHandString(self.playerhand),inline=False)
-        await self.messageChannel.send(embed=embed)
+        await self.message.edit(embed=embed)
         self.sessions.remove(self)
 
     async def hitPlayer(self):
@@ -142,7 +140,7 @@ class BlackjackGame():
         self.bot.db.koomdata.update_one({'_id':ObjectId(secrets.lotteryAmount)}, {'$inc':{'_lotteryAmount':int(self.amount)}})
         embed = discord.Embed(title='You went Bust!', color=0xD00000, description='Better luck next time bucko')
         embed.add_field(name='Your Hand',value=self.getHandString(self.playerhand))
-        await self.messageChannel.send(embed=embed)
+        await self.message.edit(embed=embed)
         self.sessions.remove(self)
 
     async def dealerBust(self):
@@ -151,7 +149,7 @@ class BlackjackGame():
         self.bot.db.koomdata.update_one({'_uid':self.player}, {'$set':{'_currency':newMoney}})
         embed = discord.Embed(title='Dealer Bust!', description=f'Congrats, you win £{self.amount}!', color=0x81E979)
         embed.add_field(name='Dealer Hand:', value=self.getHandString(self.dealerhand))
-        await self.messageChannel.send(embed=embed)
+        await self.message.edit(embed=embed)
         self.sessions.remove(self)
 
     def getHandString(self, hand):
