@@ -1,4 +1,5 @@
 import asyncio
+from coinflip import Coinflip
 import discord
 from discord import user
 from discord.ext import commands
@@ -31,6 +32,16 @@ class Casino(commands.Cog):
     async def on_reaction_add(self, reaction, user):
         for game in self.bjSessions:
             await game.update(reaction, user)
+
+    @commands.command(name='ltimer')
+    async def lotTimer(self,pCtx):
+        try:
+            lotObject = await self.bot.db.koomdata.find_one({'_id':ObjectId(secrets.lotteryAmount)})
+        except Exception as e:
+            print(e)
+        endTime = lotObject['_lotteryEndTime']
+        timeleft = int(endTime - time.time())
+        await pCtx.send(f"Lottery ends in: {timeleft}s")
 
     @commands.command(aliases=['joinlottery','joinl','lottery'])
     async def joinLot(self, pCtx):
@@ -131,99 +142,44 @@ class Casino(commands.Cog):
         self.bot.db.koomdata.update_one({'_uid':user['_uid']}, {'$set': {'_lastClaim' :  time.time() * 1000}})
         await pCtx.send("You've claimed £%s!" % int(amount))            
 
-    async def botCoinflip(self, pCtx, gambler, guess, amount, outcome):
-        headsList = ['heads','head','ct']
-        tailsList = ['tails','tail','t']
-        oldMoney = gambler['_currency']
-        newMoneyWin = oldMoney + int(amount)
-        newMoneyLoss = oldMoney - int(amount)
-        if outcome == 0 and guess in headsList:
-            await pCtx.send("You Win! - New Bal: %s" % str(newMoneyWin))
-            winner = True
-        elif outcome == 1 and guess in tailsList:
-            await pCtx.send("You win! - New Bal: %s" % str(newMoneyWin))
-            winner = True
-        else:
-            await pCtx.send("You lose - New Bal: %s" % str(newMoneyLoss))
-            winner = False    
-        if winner:
-            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set': {'_currency' :  newMoneyWin}})
-        else:
-            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set': {'_currency' :  newMoneyLoss}})
-            lotteryObject = await self.bot.db.koomdata.find_one({'_id':ObjectId('613ce2090e01049878d07fb5')})
-            newPrize = lotteryObject['_lotteryAmount'] + int(amount)
-            self.bot.db.koomdata.update_one({'_id':ObjectId('613ce2090e01049878d07fb5')}, {'$set':{'_lotteryAmount':newPrize}})
-
-    async def vsCoinflip(self, pCtx, gambler, otherPlayer, guess, amount, outcome):
-        try:
-            if '!' in otherPlayer:
-                otherUser = await self.bot.fetch_user(otherPlayer[3:len(otherPlayer)-1])
-            else:
-                otherUser = await self.bot.fetch_user(otherPlayer[2:len(otherPlayer)-1])
-            uID = otherUser.id
-            if uID == gambler['_uid']:
-                await pCtx.send("Wait a minute el'Fucko, you can't coinflip against yourself")
-                return
-            gambler2 = await self.bot.db.koomdata.find_one({'_uid' : uID})
-        except Exception as e:
-            print(e)
-        try:
-            if int(gambler2['_currency']) < int(amount):
-                await pCtx.send('%s does not have enough money to start coinflip!' % otherUser.display_name)
-                return
-        except Exception as e:
-            print(e)
-            return
-        headsList = ['heads','head','ct']
-        tailsList = ['tails','tail','t']
-        if outcome == 0 and guess in headsList:
-            await pCtx.send('<@%s> Wins the prize pool!' % gambler['_uid'])
-            winner = gambler
-        elif outcome == 1 and guess in tailsList:
-            await pCtx.send('<@%s> Wins the prize pool!' % gambler['_uid'])
-            winner = gambler
-        else:
-            await pCtx.send('<@%s> Wins the prize pool!' % gambler2['_uid'])
-            winner = gambler2
-        if winner == gambler:
-            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set' : {'_currency' : gambler['_currency'] + int(amount)}})
-            self.bot.db.koomdata.update_one({'_uid':gambler2['_uid']}, {'$set' : {'_currency' : gambler2['_currency'] - int(amount)}})
-        else:
-            self.bot.db.koomdata.update_one({'_uid':gambler['_uid']}, {'$set' : {'_currency' : gambler['_currency'] - int(amount)}})
-            self.bot.db.koomdata.update_one({'_uid':gambler2['_uid']}, {'$set' : {'_currency' : gambler2['_currency'] + int(amount)}})
-        
     @commands.command(name='coinflip')
-    async def cf(self, pCtx, amount, guess, otherPlayer = None):
-        guess = str.lower(guess)
-        if int(amount) < 0:
-            await pCtx.send("Can't bet a negative amount")
+    async def cf(self, pCtx, amount : int, guess, otherPlayer = None):
+        game = Coinflip(self.bot, pCtx.message, guess, amount, otherPlayer)
+        await game.start()
+
+    @commands.command(name='charity')
+    async def charityCmd(self, pCtx, amount: int):
+        if amount < 0:
+            await pCtx.send("Can't pay negative amount")
             return
-        headsList = ['heads','head','ct']
-        tailsList = ['tails','tail','t']
-        if guess not in headsList and guess not in tailsList:
-            await pCtx.send("Invalid guess input")
-            return
-        uID = pCtx.message.author.id
+        userID = pCtx.message.author.id
         try:
-            gambler = await self.bot.db.koomdata.find_one({'_uid' : uID})
-        except Exception as e:
+            payer = await self.bot.db.koomdata.find_one({'_uid' : userID})
+        except Exception as e: 
             print(e)
             return
-        if gambler['_currency'] < int(amount):
-            await pCtx.send("Not enough money to start bet")
+        if payer['_currency'] < amount:
+            await pCtx.send("You don't have enough money.")
             return
-        await pCtx.send("Starting flip:")
-        await asyncio.sleep(random.randrange(2,5))
-        outcome = random.choice([0,1])
-        
-        if otherPlayer == None:
-            await self.botCoinflip(pCtx, gambler, guess, amount, outcome)
-        else:
-            await self.vsCoinflip(pCtx, gambler, otherPlayer, guess, amount, outcome)
+        try:
+            farrah = await self.bot.db.koomdata.find_one({'_uid' : 278288530143444993})
+        except:
+            await pCtx.send("Error: Couldn't find user to pay in system")
+            return
+        try:
+            payerNew = payer['_currency'] - int(amount)
+            payeeNew = farrah['_currency'] + int(amount)
+            await self.bot.db.koomdata.update_one({'_uid':payer['_uid']}, {'$set': {'_currency' : payerNew}})
+            await self.bot.db.koomdata.update_one({'_uid':farrah['_uid']}, {'$set': {'_currency' :  payeeNew}})
+        except Exception as e:
+            print(e)
+            await pCtx.send("Error updating balances")
+            return
+        await pCtx.send(":white_check_mark: Successfully donated to the Bruh Fund!")
 
     @commands.command(name='pay')
-    async def send(self, pCtx, amount, pTarget):
-        if int(amount) < 0:
+    async def send(self, pCtx, amount : int, pTarget):
+        if amount < 0:
             await pCtx.send("Can't pay a negative amount")
             return
         userID = pCtx.message.author.id
@@ -231,13 +187,18 @@ class Casino(commands.Cog):
         payee = None
         try:
             payer = await self.bot.db.koomdata.find_one({'_uid' : userID})
-        except:
+        except Exception as e: 
+            print(e)
             return
-        if (payer['_currency'] < int(amount)):
+        payerCurrency = int(payer['_currency'])
+        if payerCurrency < amount:
             await pCtx.send("You don't have enough money.")
             return
         try:
-            strr = pTarget[3:len(pTarget)-1]
+            if '!' in pTarget:
+                strr = pTarget[3:len(pTarget)-1]
+            else:
+                strr = pTarget[2:len(pTarget)-1]
             payee = await self.bot.db.koomdata.find_one({'_uid' : int(strr)})
         except:
             await pCtx.send("Error: Couldn't find user to pay in system")
@@ -277,6 +238,10 @@ class Casino(commands.Cog):
             await pCtx.send("Can't bet a negative amount")
             return
         ID = pCtx.message.author.id
+        for game in self.bjSessions:
+            if game.player == ID:
+                await pCtx.send("CAN'T START ANOTHER ONE FUCKERR")
+                return
         user = await self.bot.db.koomdata.find_one({'_uid':int(ID)})
         if user['_currency'] < amount:
             await pCtx.send("You don't have enough money to gamble")

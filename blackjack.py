@@ -4,10 +4,14 @@ from discord.colour import Color
 from discord.ext import commands
 import asyncio
 import motor.motor_asyncio
+from bson.objectid import ObjectId
 import secrets
 import random
 
-playingCards = {'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10}
+playingCards = {'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
+                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
+                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
+                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10}
 
 class BlackjackGame():
     def __init__(self, bot, message, amount:int, bjSessions):
@@ -22,9 +26,10 @@ class BlackjackGame():
         self.dealerStopped = False
     
     async def start(self):
+        await self.hitDealer()
         await self.hitPlayer()
         await self.hitPlayer()
-        await self.sendHitMessage()
+        #await self.sendHitMessage()
 
     async def update(self, reaction, user):
         if (reaction.message.id != self.message.id) or (user.id != self.player):
@@ -44,7 +49,8 @@ class BlackjackGame():
             embed.set_author(name=name, url=discord.Embed.Empty, icon_url=pp)
         except Exception as e:
             print(e)
-        embed.add_field(name='Dealer First Card:',value=self.dealerhand[0], inline=False)
+        text = self.dealerhand[0]
+        embed.add_field(name='Dealer First Card:',value=text, inline=False)
         embed.add_field(name='Your Hand:',value=f'{hand}')
         msg = await self.message.channel.send(embed=embed)
         self.message = msg
@@ -89,6 +95,7 @@ class BlackjackGame():
         userObject = await self.bot.db.koomdata.find_one({'_uid':self.player})
         newMoney = userObject['_currency'] - int(self.amount)
         self.bot.db.koomdata.update_one({'_uid':self.player}, {'$set':{'_currency':newMoney}})
+        self.bot.db.koomdata.update_one({'_id':ObjectId(secrets.lotteryAmount)}, {'$inc':{'_lotteryAmount':int(self.amount)}})
         embed = discord.Embed(title='You Lose', color=0xD00000, description='Better luck next time')
         dealerHand = self.getHandString(self.dealerhand)
         playerHand = self.getHandString(self.playerhand)
@@ -108,8 +115,8 @@ class BlackjackGame():
         self.sessions.remove(self)
 
     async def hitPlayer(self):
-        r1 = random.randrange(0,13)
-        self.playerhand.append([*playingCards][r1])
+        c1 = random.choice([*playingCards])
+        self.playerhand.append(c1)
         try:
             sumOfCards = self.valueOfHand(self.playerhand)
         except Exception as e:
@@ -117,11 +124,13 @@ class BlackjackGame():
         if sumOfCards > 21:
             await self.playerBust()
             return
-        await self.updateDealer()
+        if len(self.playerhand) > 1:
+            await self.sendHitMessage()
+        #await self.updateDealer()
         
     async def hitDealer(self):
-        r1 = random.randrange(0,13)
-        self.dealerhand.append([*playingCards][r1])
+        c1 = random.choice([*playingCards])
+        self.dealerhand.append(c1)
         sumOfCards = self.valueOfHand(self.dealerhand)
         if sumOfCards > 21:
             await self.dealerBust()
@@ -130,6 +139,7 @@ class BlackjackGame():
         userObject = await self.bot.db.koomdata.find_one({'_uid':self.player})
         newMoney = userObject['_currency'] - int(self.amount)
         self.bot.db.koomdata.update_one({'_uid':self.player}, {'$set':{'_currency':newMoney}})
+        self.bot.db.koomdata.update_one({'_id':ObjectId(secrets.lotteryAmount)}, {'$inc':{'_lotteryAmount':int(self.amount)}})
         embed = discord.Embed(title='You went Bust!', color=0xD00000, description='Better luck next time bucko')
         embed.add_field(name='Your Hand',value=self.getHandString(self.playerhand))
         await self.messageChannel.send(embed=embed)

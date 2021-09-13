@@ -20,6 +20,12 @@ class Utility(commands.Cog):
             await asyncio.sleep(6)
             await message.channel.send("He's **fucking shit**")
 
+    async def fetchFromMention(self, mention):
+        if '!' in mention:
+            response = await self.bot.fetch_user(mention[3:len(mention)-1])
+        else:
+            response = await self.bot.fetch_user(mention[2:len(mention)-1])
+        return response
     
 def setup(bot):
     bot.add_cog(Utility(bot))
