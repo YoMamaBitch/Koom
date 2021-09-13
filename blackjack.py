@@ -1,3 +1,4 @@
+from math import e
 from os import name
 import discord
 from discord.colour import Color
@@ -19,6 +20,7 @@ class BlackjackGame():
         self.bot = bot
         self.message = message
         self.messageChannel = message.channel
+        self.outMsg = None
         self.amount = amount
         self.sessions = bjSessions
         self.player = message.author.id
@@ -33,7 +35,7 @@ class BlackjackGame():
         #await self.sendHitMessage()
 
     async def update(self, reaction, user):
-        if (reaction.message.id != self.message.id) or (user.id != self.player):
+        if (reaction.message.id != self.outMsg.id) or (user.id != self.player):
             return
         if reaction.emoji == '🇸':
             await self.standPlayer()
@@ -53,7 +55,12 @@ class BlackjackGame():
         text = self.dealerhand[0]
         embed.add_field(name='Dealer First Card:',value=text, inline=False)
         embed.add_field(name='Your Hand:',value=f'{hand}')
-        await self.message.edit(embed=embed)
+        if (self.outMsg == None):
+            self.outMsg = await self.message.channel.send(embed=embed)
+            await self.outMsg.add_reaction('🇸')
+            await self.outMsg.add_reaction('🇭')
+            return
+        await self.outMsg.edit(embed=embed)
 
     async def standPlayer(self):
         while self.valueOfHand(self.dealerhand) < 17:
@@ -86,7 +93,7 @@ class BlackjackGame():
         embed = discord.Embed(title="It's a draw!", color=0x2F1847)
         embed.add_field(name='Dealer Hand:',value=self.getHandString(self.dealerhand),inline=False)
         embed.add_field(name='Player Hand:',value=self.getHandString(self.playerhand))
-        await self.message.edit(embed=embed)
+        await self.outMsg.edit(embed=embed)
         self.sessions.remove(self)
 
     async def playerLose(self):
@@ -99,7 +106,7 @@ class BlackjackGame():
         playerHand = self.getHandString(self.playerhand)
         embed.add_field(name='Dealer Hand:',value=dealerHand)
         embed.add_field(name='Your Hand: ',value=playerHand,inline=False)
-        await self.message.edit(embed=embed)
+        await self.outMsg.edit(embed=embed)
         self.sessions.remove(self)
 
     async def playerWin(self):
@@ -109,7 +116,7 @@ class BlackjackGame():
         embed = discord.Embed(title='You win!', color=0x81E979)
         embed.add_field(name='Dealer Hand:',value=self.getHandString(self.dealerhand))
         embed.add_field(name='Your Hand: ',value=self.getHandString(self.playerhand),inline=False)
-        await self.message.edit(embed=embed)
+        await self.outMsg.edit(embed=embed)
         self.sessions.remove(self)
 
     async def hitPlayer(self):
@@ -130,8 +137,11 @@ class BlackjackGame():
         c1 = random.choice([*playingCards])
         self.dealerhand.append(c1)
         sumOfCards = self.valueOfHand(self.dealerhand)
-        if sumOfCards > 21:
-            await self.dealerBust()
+        try:
+            if sumOfCards > 21:
+                await self.dealerBust()
+        except Exception as e:
+            print(e)
 
     async def playerBust(self):
         userObject = await self.bot.db.koomdata.find_one({'_uid':self.player})
@@ -140,7 +150,7 @@ class BlackjackGame():
         self.bot.db.koomdata.update_one({'_id':ObjectId(secrets.lotteryAmount)}, {'$inc':{'_lotteryAmount':int(self.amount)}})
         embed = discord.Embed(title='You went Bust!', color=0xD00000, description='Better luck next time bucko')
         embed.add_field(name='Your Hand',value=self.getHandString(self.playerhand))
-        await self.message.edit(embed=embed)
+        await self.outMsg.edit(embed=embed)
         self.sessions.remove(self)
 
     async def dealerBust(self):
@@ -149,7 +159,8 @@ class BlackjackGame():
         self.bot.db.koomdata.update_one({'_uid':self.player}, {'$set':{'_currency':newMoney}})
         embed = discord.Embed(title='Dealer Bust!', description=f'Congrats, you win £{self.amount}!', color=0x81E979)
         embed.add_field(name='Dealer Hand:', value=self.getHandString(self.dealerhand))
-        await self.message.edit(embed=embed)
+        embed.add_field(name='Your Hand:', value=self.getHandString(self.playerhand), inline=False)
+        await self.outMsg.edit(embed=embed)
         self.sessions.remove(self)
 
     def getHandString(self, hand):
