@@ -1,4 +1,3 @@
-from _typeshed import Self
 import discord
 from discord.ext import commands
 from discord.ext import tasks
@@ -78,3 +77,6 @@ class Lottery(commands.Cog):
     @lottery.before_loop
     async def lottery_before(self):
         await self.bot.wait_until_ready()
+
+def setup(bot):
+    bot.add_cog(Lottery(bot))

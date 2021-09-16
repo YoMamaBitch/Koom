@@ -6,12 +6,6 @@ from bson.objectid import ObjectId
 import secrets
 import random
 
-#playingCards = {'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
-#                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
-#                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10,
-#                'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10}
-playingCards = {'A':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':10,'K':10,'Q':10}
-
 class BlackjackGame():
     def __init__(self, bot, message, amount:int, bjSessions):
         self.bot = bot
@@ -24,6 +18,13 @@ class BlackjackGame():
         self.playerhand = []
         self.dealerhand =  []
         self.dealerStopped = False
+        self.deck = [('A',11),('2',2),('3',3),('4',4),('5',5),('6',6),('7',7),('8',8),('9',9),('10',10),('J',10),('Q',10),('K',10),
+        ('A',11),('2',2),('3',3),('4',4),('5',5),('6',6),('7',7),('8',8),('9',9),('10',10),('J',10),('Q',10),('K',10),
+        ('A',11),('2',2),('3',3),('4',4),('5',5),('6',6),('7',7),('8',8),('9',9),('10',10),('J',10),('Q',10),('K',10),
+        ('A',11),('2',2),('3',3),('4',4),('5',5),('6',6),('7',7),('8',8),('9',9),('10',10),('J',10),('Q',10),('K',10)]
+
+        random.shuffle(self.deck)
+        random.shuffle(self.deck)
     
     async def start(self):
         await self.hitDealer()
@@ -41,15 +42,17 @@ class BlackjackGame():
 
     async def sendHitMessage(self):
         hand = self.getHandString(self.playerhand)
+        value = self.valueOfHand(self.playerhand)
+        hand += f'\nValue={value}'
         user = await self.bot.fetch_user(self.player)
         name = user.display_name
         pp = user.avatar_url.BASE + user.avatar_url._url
         try:
-            embed = discord.Embed(title="Hit?",description='Would you like to hit?', color=0xDB2763)
+            embed = discord.Embed(title="Hit?",description='\u200b', color=0xDB2763)
             embed.set_author(name=name, url=discord.Embed.Empty, icon_url=pp)
         except Exception as e:
             print(e)
-        text = self.dealerhand[0]
+        text = self.dealerhand[0][0]
         embed.add_field(name='Dealer First Card:',value=text, inline=False)
         embed.add_field(name='Your Hand:',value=f'{hand}')
         if (self.outMsg == None):
@@ -116,29 +119,49 @@ class BlackjackGame():
         await self.outMsg.edit(embed=embed)
         self.sessions.remove(self)
 
-    async def hitPlayer(self):
-        c1 = random.choice([*playingCards])
-        self.playerhand.append(c1)
+    async def checkIfPlayerBust(self):
+        sumOfCards = self.valueOfHand(self.playerhand)
         try:
-            sumOfCards = self.valueOfHand(self.playerhand)
+            if sumOfCards > 21:
+                while ('A',11) in self.playerhand:
+                    self.playerhand.remove(('A',11))
+                    self.playerhand.append(('A',1))
+                    if self.valueOfHand(self.playerhand) <= 21:
+                        await self.sendHitMessage()
+                        return
+                await self.playerBust()
+                return
         except Exception as e:
             print(e)
-        if sumOfCards > 21:
-            await self.playerBust()
-            return
         if len(self.playerhand) > 1:
             await self.sendHitMessage()
-        #await self.updateDealer()
+        return False
+
+    async def hitPlayer(self):
+        c1 = random.choice([*self.deck])
+        self.deck.remove(c1)
+        self.playerhand.append(c1)
+        await self.checkIfPlayerBust()
         
-    async def hitDealer(self):
-        c1 = random.choice([*playingCards])
-        self.dealerhand.append(c1)
+    async def checkIfDealerBust(self):
         sumOfCards = self.valueOfHand(self.dealerhand)
         try:
             if sumOfCards > 21:
+                while ('A',11) in self.dealerhand:
+                    self.dealerhand.remove(('A',11))
+                    self.dealerhand.append(('A',1))
+                    if self.valueOfHand(self.dealerhand) <= 21:
+                        return
                 await self.dealerBust()
         except Exception as e:
             print(e)
+        return False
+
+    async def hitDealer(self):
+        c1 = random.choice([*self.deck])
+        self.deck.remove(c1)
+        self.dealerhand.append(c1)
+        await self.checkIfDealerBust()
 
     async def playerBust(self):
         userObject = await self.bot.db.koomdata.find_one({'_uid':self.player})
@@ -163,11 +186,11 @@ class BlackjackGame():
     def getHandString(self, hand):
         strr = ''
         for card in hand:
-            strr += card + ' '
+            strr += card[0] + ' '
         return strr
 
     def valueOfHand(self, hand):
         total = 0
         for card in hand:
-            total += playingCards[card]
+            total += card[1]
         return total
