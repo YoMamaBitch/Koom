@@ -1,7 +1,4 @@
-from math import e
-from os import name
 import discord
-from discord.colour import Color
 from discord.ext import commands
 import asyncio
 import motor.motor_asyncio

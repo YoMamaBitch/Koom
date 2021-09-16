@@ -20,12 +20,18 @@ class Utility(commands.Cog):
             await asyncio.sleep(6)
             await message.channel.send("He's **fucking shit**")
 
-    async def fetchFromMention(self, mention):
+    async def createErrorEmbed(self, description):
+        return discord.Embed(title='Error', color=0xC5283D,description=description)
+
+    def removeMentionMarkup(self, mention):
         if '!' in mention:
-            response = await self.bot.fetch_user(mention[3:len(mention)-1])
+            response = mention[3:len(mention)-1]
         else:
-            response = await self.bot.fetch_user(mention[2:len(mention)-1])
+            response =mention[2:len(mention)-1]
         return response
+
+    async def fetchFromMention(self, mention):
+        return await self.bot.fetch_user(self.removeMentionMarkup(mention))
     
 def setup(bot):
     bot.add_cog(Utility(bot))

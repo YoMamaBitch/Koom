@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+import motor.motor_asyncio
 import os
 import secrets
 
@@ -19,4 +20,6 @@ for file in os.listdir('./cogs'):
         bot.load_extension(f'cogs.{file[:-3]}')
         print('Loaded: %s' %f'cogs.{file[:-3]}')
 
+bot.mongo = motor.motor_asyncio.AsyncIOMotorClient(str(secrets.mongoKey))
+bot.db = bot.mongo.userdata
 bot.run(secrets.discordKey)
