@@ -10,8 +10,9 @@ class League(commands.Cog):
         self.watcher = LolWatcher(secrets.riotKey, default_match_v5=True)
         
     @commands.command(name='isInt')
-    async def isInting(self, pCtx, SummName):
-        player = self.watcher.summoner.by_name('EUW1',SummName)
+    async def isInting(self, pCtx, *SummName):
+        SummonerName = ' '.join(SummName)
+        player = self.watcher.summoner.by_name('EUW1',SummonerName)
         puuid = player['puuid']
         matchlist = self.watcher.match.matchlist_by_puuid('EUROPE',puuid)
         averageKD = 0

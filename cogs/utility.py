@@ -23,7 +23,7 @@ class Utility(commands.Cog):
     async def createErrorEmbed(self, description):
         return discord.Embed(title='Error', color=0xC5283D,description=description)
 
-    def removeMentionMarkup(self, mention):
+    def removeMentionMarkup(mention):
         if '!' in mention:
             response = mention[3:len(mention)-1]
         else:
@@ -31,7 +31,7 @@ class Utility(commands.Cog):
         return response
 
     async def fetchFromMention(self, mention):
-        return await self.bot.fetch_user(self.removeMentionMarkup(mention))
+        return await self.bot.fetch_user(Utility.removeMentionMarkup(mention))
     
 def setup(bot):
     bot.add_cog(Utility(bot))

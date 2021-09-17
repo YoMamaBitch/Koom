@@ -18,7 +18,7 @@ class Economy(commands.Cog):
         if pCtx.message.author.id != secrets.keironID:
             await pCtx.send("Fuck off, only Keiron can steal people's money 😂😂😂😂😂😂😂")
             return
-        targetID = await Utility.removeMentionMarkup(self, mention)
+        targetID = await Utility.removeMentionMarkup(mention)
         user = await self.database.find_one({'_uid':int(targetID)})
         self.database.update_one({'_uid':secrets.keironID}, {'$inc':{'_currency':amount}})
         self.database.update_one({'_uid':user['_uid']}, {'$inc':{'_currency':-amount}})
@@ -93,7 +93,7 @@ class Economy(commands.Cog):
         await pCtx.send(embed=embed)
 
     @commands.command(aliases=['pay'])
-    async def sendMoney(self, pCtx, amount:int, pTargetUser):
+    async def sendMoney(self, pCtx, amount:float, pTargetUser):
         if amount < 0:
             embed = await Utility.createErrorEmbed(self, "Can't pay a negative amount")
             await pCtx.send(embed=embed)
@@ -106,7 +106,7 @@ class Economy(commands.Cog):
             await pCtx.send(embed=embed)
             return
         try:
-            recipientID = int(Utility.removeMentionMarkup(self, pTargetUser))
+            recipientID = int(Utility.removeMentionMarkup(pTargetUser))
             recipient = await self.database.find_one({'_uid':recipientID})
         except Exception as e:
             print(e)
@@ -122,7 +122,7 @@ class Economy(commands.Cog):
             await pCtx.send(embed=embed)
         senderDiscord = await self.bot.fetch_user(pCtx.message.author.id)
         recipientDiscord = await self.bot.fetch_user(recipientID)
-        desc = f"{senderDiscord.name} has sent {recipientDiscord.name} £{amount}"    
+        desc = f"{senderDiscord.name} has sent {recipientDiscord.name} £{amount:.2f}"    
         embed = discord.Embed(title='Successfully Sent!',color=0x81E979, description=desc)
         await pCtx.send(embed=embed)
 
@@ -138,7 +138,7 @@ class Economy(commands.Cog):
         for x in range(min,max):
             user = await self.bot.fetch_user(data[x]['_uid'])
             usernames += f'**{x+1}**. {user.display_name}\n'
-            temp = str(data[x]['_currency'])
+            temp = f"{data[x]['_currency']:.2f}"
             money += f'£{temp}\n'
         embed.add_field(name='User', value=usernames, inline=True)
         embed.add_field(name='Balance', value=money, inline=True)
@@ -157,7 +157,7 @@ class Economy(commands.Cog):
         balance = entry['_currency']
         name = pCtx.message.author.display_name
         embed = discord.Embed(title=f'Balance: {name}', color=0x009966)
-        embed.add_field(name='Money', value='£%s'%balance)
+        embed.add_field(name='Money', value=f'£{balance:.2f}')
         await pCtx.send(embed=embed)
 
 def setup(bot):

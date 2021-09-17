@@ -46,10 +46,10 @@ class Coinflip():
         p1LossBal = self.player['_currency'] - self.amount
         p2WinBal = targetDoc['_currency'] + self.amount
         p2LossBal = targetDoc['_currency'] - self.amount
-        winText = f'{self.message.author.display_name}, £{self.amount} has been added to your account.\nBalance: £{p1WinBal}\n\n'
-        winText += f'{target.display_name}, £{self.amount} has been taken from your account.\nBalance: £{p2LossBal}'
-        loseText = f'{self.message.author.display_name}, £{self.amount} has been taken from your account.\nBalance: £{p1LossBal}\n\n'
-        loseText += f'{target.display_name}, £{self.amount} has been added to your account.\nBalance: £{p2WinBal}'
+        winText = f'{self.message.author.display_name}, £{self.amount} has been added to your account.\nBalance: £{p1WinBal:.2f}\n\n'
+        winText += f'{target.display_name}, £{self.amount} has been taken from your account.\nBalance: £{p2LossBal:.2f}'
+        loseText = f'{self.message.author.display_name}, £{self.amount} has been taken from your account.\nBalance: £{p1LossBal:.2f}\n\n'
+        loseText += f'{target.display_name}, £{self.amount} has been added to your account.\nBalance: £{p2WinBal:.2f}'
 
         if result > 500000 and self.guess in self.headList:
             embed = discord.Embed(title=f'{self.message.author.display_name} Wins!', 
@@ -70,8 +70,8 @@ class Coinflip():
         prevBal = self.player['_currency']
         newBalWin = prevBal + self.amount
         newBalLoss = prevBal - self.amount
-        winText = f'£{self.amount} has been added to your account. Your new balance is £{newBalWin}'
-        loseText = f'£{self.amount} has been taken from your account. Your new balance is £{newBalLoss}'
+        winText = f'£{self.amount} has been added to your account. Your new balance is £{newBalWin:.2f}'
+        loseText = f'£{self.amount} has been taken from your account. Your new balance is £{newBalLoss:.2f}'
         if result > 500000 and self.guess in self.headList:
             embed = discord.Embed(title='You Win!', color=0xB43E8F,description=winText)
             await self.updateBalance(self.amount, self.player['_uid'])
@@ -81,6 +81,7 @@ class Coinflip():
         else:
             embed = discord.Embed(title='You Lose', color=0x750D37,description=loseText)
             await self.updateBalance(-self.amount, self.player['_uid'])
+            await self.bot.db.koomdata.update_one({'_id':ObjectId(secrets.lotteryAmount)}, {'$inc':{'_lotteryAmount':self.amount * secrets.tax}})
         await msg.edit(embed=embed)
 
     async def flip(self):

@@ -1,5 +1,4 @@
 import discord
-from discord.ext import commands
 import asyncio
 import motor.motor_asyncio
 from bson.objectid import ObjectId
@@ -98,9 +97,9 @@ class BlackjackGame():
 
     async def playerLose(self):
         userObject = await self.bot.db.koomdata.find_one({'_uid':self.player})
-        newMoney = userObject['_currency'] - int(self.amount)
+        newMoney = userObject['_currency'] - float(self.amount)
         self.bot.db.koomdata.update_one({'_uid':self.player}, {'$set':{'_currency':newMoney}})
-        self.bot.db.koomdata.update_one({'_id':ObjectId(secrets.lotteryAmount)}, {'$inc':{'_lotteryAmount':int(self.amount)}})
+        self.bot.db.koomdata.update_one({'_id':ObjectId(secrets.lotteryAmount)}, {'$inc':{'_lotteryAmount':float(self.amount * secrets.tax)}})
         embed = discord.Embed(title='You Lose', color=0xD00000, description='Better luck next time')
         dealerHand = self.getHandString(self.dealerhand)
         playerHand = self.getHandString(self.playerhand)
@@ -111,7 +110,7 @@ class BlackjackGame():
 
     async def playerWin(self):
         userObject = await self.bot.db.koomdata.find_one({'_uid':self.player})
-        newMoney = userObject['_currency']+ int(self.amount)
+        newMoney = userObject['_currency']+ float(self.amount)
         self.bot.db.koomdata.update_one({'_uid':self.player}, {'$set':{'_currency':newMoney}})
         embed = discord.Embed(title='You win!', color=0x81E979)
         embed.add_field(name='Dealer Hand:',value=self.getHandString(self.dealerhand))
@@ -165,9 +164,9 @@ class BlackjackGame():
 
     async def playerBust(self):
         userObject = await self.bot.db.koomdata.find_one({'_uid':self.player})
-        newMoney = userObject['_currency'] - int(self.amount)
+        newMoney = userObject['_currency'] - float(self.amount)
         self.bot.db.koomdata.update_one({'_uid':self.player}, {'$set':{'_currency':newMoney}})
-        self.bot.db.koomdata.update_one({'_id':ObjectId(secrets.lotteryAmount)}, {'$inc':{'_lotteryAmount':int(self.amount)}})
+        self.bot.db.koomdata.update_one({'_id':ObjectId(secrets.lotteryAmount)}, {'$inc':{'_lotteryAmount':int(self.amount * secrets.tax)}})
         embed = discord.Embed(title='You went Bust!', color=0xD00000, description='Better luck next time bucko')
         embed.add_field(name='Your Hand',value=self.getHandString(self.playerhand))
         await self.outMsg.edit(embed=embed)
@@ -175,7 +174,7 @@ class BlackjackGame():
 
     async def dealerBust(self):
         userObject = await self.bot.db.koomdata.find_one({'_uid':self.player})
-        newMoney = userObject['_currency'] + int(self.amount)
+        newMoney = userObject['_currency'] + float(self.amount)
         self.bot.db.koomdata.update_one({'_uid':self.player}, {'$set':{'_currency':newMoney}})
         embed = discord.Embed(title='Dealer Bust!', description=f'Congrats, you win £{self.amount}!', color=0x81E979)
         embed.add_field(name='Dealer Hand:', value=self.getHandString(self.dealerhand))

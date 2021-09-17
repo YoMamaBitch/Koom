@@ -1,5 +1,7 @@
 import asyncio
 from coinflip import Coinflip
+import blackjack
+from dice import Dice
 import discord
 from discord import user
 from discord.ext import commands
@@ -8,7 +10,6 @@ import random
 import secrets
 import time
 from bson.objectid import ObjectId
-import blackjack
 
 class Casino(commands.Cog):
     def __init__(self, bot):
@@ -25,6 +26,26 @@ class Casino(commands.Cog):
     async def on_reaction_add(self, reaction, user):
         for game in self.bjSessions:
             await game.update(reaction, user)
+
+    @commands.command(name='configdice')
+    async def dic(self,pCtx):
+        game = Dice(self.bot, pCtx.message)
+        await game.displayConfig()
+
+    @commands.command(name='configroll')
+    async def dir(self,pCtx, roll):
+        game = Dice(self.bot, pCtx.message)
+        await game.updateConfigRoll(roll)
+
+    @commands.command(name='configpayout')
+    async def dip(self,pCtx,payout):
+        game = Dice(self.bot, pCtx.message)
+        await game.updateConfigPayout(payout)
+
+    @commands.command(name='rolldice')
+    async def di(self, pCtx, amount : int):
+        game = Dice(self.bot, pCtx.message, amount)
+        await game.start()
 
     @commands.command(name='coinflip')
     async def cf(self, pCtx, amount : int, guess, otherPlayer = None):

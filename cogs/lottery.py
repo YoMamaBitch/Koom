@@ -26,6 +26,13 @@ class Lottery(commands.Cog):
         embed = discord.Embed(title='Lottery Remaining Time', color=0x78BC61, description=desc)
         await pCtx.send(embed=embed)
     
+    @commands.command(name='ltotal')
+    async def lotteryTotal(self, pCtx):
+        lotteryObj = await self.database.find_one({'_id':ObjectId(secrets.lotteryAmount)})
+        amount = float(lotteryObj['_lotteryAmount'])
+        embed=discord.Embed(title='Lottery Prize', color=0x78BC61, description=f"The grand prize is currently: £{amount}")
+        await pCtx.send(embed=embed)
+
     @commands.command(aliases=['joinlottery','joinl','lottery'])
     async def joinLot(self,pCtx):
         try:
@@ -60,11 +67,14 @@ class Lottery(commands.Cog):
         description='All money lost to the system is returned here in this lottery, every 3 hours!', 
         color=0xD4ADCF, footer="type 'bruh joinl' to join the lottery!")
         amount = lotteryObject['_lotteryAmount']
+        m,s=divmod(timeleft,60)
+        h,m=divmod(m,60)
+        desc = f'{h:d}h, {m:02d}m, {s:02d}s' 
         embed.add_field(name='Current Prize', value=f'£{amount}')
-        embed.add_field(name='Time Left',value=f'{timeleft}s')
+        embed.add_field(name='Time Left',value=f'{desc}')
         await channel.send(embed=embed)
 
-    @tasks.loop(seconds=0.0,minutes=0.0, hours=1.0, count=None)
+    @tasks.loop(seconds=0.0,minutes=60.0, hours=0.0, count=None)
     async def lottery(self):
         channel = self.bot.get_channel(secrets.casinoChannel)
         lotteryObject = await self.database.find_one({'_id':ObjectId(secrets.lotteryAmount)})
