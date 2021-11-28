@@ -32,6 +32,7 @@ class Economy(commands.Cog):
         userID = pCtx.message.author.id
         try:
             user = await self.database.find_one({'_uid':userID})
+            await self.errorCheck(pCtx,user)
         except Exception as e:
             embed = await Utility.createErrorEmbed(self, "Can't find you in the database")
             await pCtx.send(embed=embed)
@@ -65,6 +66,7 @@ class Economy(commands.Cog):
         userID = pCtx.message.author.id
         try:
             sender = await self.database.find_one({'_uid' : userID})
+            await self.errorCheck(pCtx,sender)
         except Exception as e: 
             embed = await Utility.createErrorEmbed(self, "Error getting sender's database record")
             await pCtx.send(embed=embed)
@@ -76,6 +78,7 @@ class Economy(commands.Cog):
             return
         try:
             farrah = await self.database.find_one({'_uid' : secrets.farrahID})
+            await self.errorCheck(pCtx,farrah)
         except:
             embed = await Utility.createErrorEmbed(self, "Couldn't find user to pay in database")
             await pCtx.send(embed=embed)
@@ -100,6 +103,7 @@ class Economy(commands.Cog):
             return
         try:
             sender = await self.database.find_one({'_uid':pCtx.message.author.id})
+            await self.errorCheck(pCtx,sender)
         except Exception as e:
             print(e)
             embed = await Utility.createErrorEmbed(self, "Error finding sender's database record")
@@ -108,6 +112,7 @@ class Economy(commands.Cog):
         try:
             recipientID = int(Utility.removeMentionMarkup(pTargetUser))
             recipient = await self.database.find_one({'_uid':recipientID})
+            await self.errorCheck(pCtx,recipient)
         except Exception as e:
             print(e)
             embed = await Utility.createErrorEmbed(self, "Error finding recipient's database record")
@@ -136,7 +141,10 @@ class Economy(commands.Cog):
         usernames = ''
         money = ''
         for x in range(min,max):
-            user = await self.bot.fetch_user(data[x]['_uid'])
+            try:
+                user = await self.bot.fetch_user(data[x]['_uid'])
+            except:
+                continue
             usernames += f'**{x+1}**. {user.display_name}\n'
             temp = f"{data[x]['_currency']:.2f}"
             money += f'£{temp}\n'
@@ -149,6 +157,7 @@ class Economy(commands.Cog):
         UID = pCtx.message.author.id
         try:
             entry = await self.database.find_one({'_uid':UID})
+            await self.errorCheck(pCtx, entry)
         except Exception as e:
             print(e)
             embed = await Utility.createErrorEmbed(self, 'Finding balance')
@@ -159,6 +168,16 @@ class Economy(commands.Cog):
         embed = discord.Embed(title=f'Balance: {name}', color=0x009966)
         embed.add_field(name='Money', value=f'£{balance:.2f}')
         await pCtx.send(embed=embed)
+    
+    async def errorCheck(self, pCtx, user):
+        if (user != None):
+            return
+        doc = {'_uid' : pCtx.message.author.id, '_currency':100, '_lastClaim':0}
+        await self.database.insert_one(doc)
+        desc = "You haven't used the bot before, so I have created an account for you with a balance of: **£100**\n\nYou can now use commands :)"
+        embed = discord.Embed(title="Created Account!", color=0x1ce8b8, description = desc)
+        await pCtx.send(embed=embed)
+
 
 def setup(bot):
     bot.add_cog(Economy(bot))

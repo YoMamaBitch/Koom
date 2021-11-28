@@ -81,7 +81,8 @@ class Coinflip():
         else:
             embed = discord.Embed(title='You Lose', color=0x750D37,description=loseText)
             await self.updateBalance(-self.amount, self.player['_uid'])
-            await self.bot.db.koomdata.update_one({'_id':ObjectId(secrets.lotteryAmount)}, {'$inc':{'_lotteryAmount':self.amount * secrets.tax}})
+            await self.bot.db.koomdata.update_one({'_id':ObjectId(secrets.lotteryID)}, {'$inc':{'_lotteryAmount':self.amount * secrets.tax}})
+
         await msg.edit(embed=embed)
 
     async def flip(self):

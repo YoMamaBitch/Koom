@@ -27,22 +27,22 @@ class Casino(commands.Cog):
         for game in self.bjSessions:
             await game.update(reaction, user)
 
-    @commands.command(name='configdice')
+    @commands.command(aiases=['config dice','diceconfig'])
     async def dic(self,pCtx):
         game = Dice(self.bot, pCtx.message)
         await game.displayConfig()
 
-    @commands.command(name='configroll')
+    @commands.command(aliases=['configroll','rollconfig'])
     async def dir(self,pCtx, roll):
         game = Dice(self.bot, pCtx.message)
         await game.updateConfigRoll(roll)
 
-    @commands.command(name='configpayout')
+    @commands.command(aliases=['configpayout','payoutconfig'])
     async def dip(self,pCtx,payout):
         game = Dice(self.bot, pCtx.message)
         await game.updateConfigPayout(payout)
 
-    @commands.command(name='rolldice')
+    @commands.command(aliases=['rolldice', 'diceroll'])
     async def di(self, pCtx, amount : int):
         game = Dice(self.bot, pCtx.message, amount)
         await game.start()

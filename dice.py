@@ -30,7 +30,7 @@ class Dice():
     async def updateBalance(self):
         if self.amount < 0:
             await self.db.update_one({'_uid':self.userid}, {'$inc':{'_currency':self.amount}})
-            await self.db.update_one({'_id':secrets.lotteryAmount}, {'$inc':{'_lotteryAmount':-self.amount * secrets.tax}})
+            await self.db.update_one({'_id':ObjectId(secrets.lotteryAmount)}, {'$inc':{'_lotteryAmount':(-self.amount * secrets.tax)}})
         else:
             config = await self.dicedb.find_one({'_uid':self.userid})
             payout = config['_payout']
