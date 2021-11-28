@@ -21,4 +21,21 @@ for file in os.listdir('./cogs'):
         bot.load_extension(f'cogs.{file[:-3]}')
         print('Loaded: %s' %f'cogs.{file[:-3]}')
 
+@bot.command()
+async def help(pCtx):
+    embed = discord.Embed(title="Need Help with Koom?", color=0xe0e0e0)
+    with open('helpText.txt') as file:
+        for line in file:
+            cmd = line.split('--')[0]
+            if (cmd == '\n'):
+                cmd = '\u200b'
+            try:
+                explanation = line.split('--')[1]
+            except:
+                explanation = '\u200b'
+            embed.add_field(name=cmd,value=explanation,inline=False)
+
+    await pCtx.send(embed=embed)
+
+
 bot.run(secrets.discordKey)

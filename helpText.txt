@@ -1,11 +1,23 @@
-bruh summon -- Summons bot to voice channel
-bruh Play URL -- Plays URL of a Youtube Video 
-bruh Play TITLE -- Searches Youtube for Video with specified Title 
-bruh Skip -- Skips song
-bruh remove X -- Removes X song from queue
-bruh LQ/LoopQueue -- Loops the current queue
-bruh q/queue -- Displays queue
-bruh dc/Disconnect -- Disconnects bot
-bruh stop -- Stops song
-bruh resume -- Starts song 
-bruh pause -- Pauses song
+Music Commands :musical_note: 
+Play URL -- Plays audio from youtube URL
+Play TITLE -- Plays audio from youtube video with title
+Skip -- Skips the current audio
+Resume -- Resumes playing
+Pause -- Pauses the audio
+Queue -- Displays the current queue
+Remove X -- Removes video at index X in queue
+Loopqueue/Lq -- Loops the current queue
+Dc/Disconnect -- Disconnects bot from the channel
+
+Economy Commands :moneybag: 
+Baltop -- Displays top balances in server
+Balance/Bal -- Displays your balance
+Hourly -- Can be used hourly to give pocket money
+Pay M @ -- Gives money M to user mentioned
+Charity M -- Gives money M to Farrah
+
+Casino Commands :8ball:
+Coinflip M G -- Coinflips, where M is the bet and G is the guess (heads/tails)
+Coinflip M G @ -- Coinflips as before, but forcibly makes @User enter opposing side
+Blackjack M -- Starts a game of Blackjack, where M is the bet
+More commands in the future

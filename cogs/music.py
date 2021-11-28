@@ -93,11 +93,6 @@ class Music(commands.Cog):
         else:
             await pCtx.send("Audio not paused.")
 
-    @commands.command(name='stop')
-    async def _stop(self,pCtx):
-        self.voice = discord.utils.get(self.bot.voice_clients, guild=pCtx.guild)
-        self.voice.stop()
-
     @commands.command(name='pause')
     async def _pause(self, pCtx):
         self.voice = discord.utils.get(self.bot.voice_clients, guild=pCtx.guild)
@@ -211,21 +206,6 @@ class Music(commands.Cog):
         self._incrementPointer()
         if not self.bReachedEnd or self.bLoop:
             self._playSong(pCtx)
-
-    @commands.command(name='help')
-    async def _helpMenu(self,pCtx):
-        helpCommands = ''
-        helpExplanation = ''
-        with open('helpText.txt') as file:
-            for line in file:
-                helpCommands += line.split('--')[0] + '\n'
-                helpExplanation += line.split('--')[1]
-
-        embed = discord.Embed(title="Scuffed Help V0.3", color=0xe0e0e0)
-        embed.add_field(name='Commands', value=helpCommands)
-        embed.add_field(name='\u200b', value=helpExplanation)
-        embed.add_field(name='\u200b', value="Again, it's not even remotely close to being done so there's a lot of commands missing... Bite me.", inline=False)
-        await pCtx.send(embed=embed)
 
     
 def setup(bot):
