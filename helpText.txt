@@ -20,4 +20,9 @@ Casino Commands :8ball:
 Coinflip M G -- Coinflips, where M is the bet and G is the guess (heads/tails)
 Coinflip M G @ -- Coinflips as before, but forcibly makes @User enter opposing side
 Blackjack M -- Starts a game of Blackjack, where M is the bet
+Config Dice -- Displays your current dice Config
+Config Roll X -- Configures the roll number (X) for your dice
+Config Payout X -- Instead, Configures the payout (X) for your dice
+Roll Dice M -- Rolls your dice with M as the bet
+
 More commands in the future

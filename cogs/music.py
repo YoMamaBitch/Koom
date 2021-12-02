@@ -1,5 +1,7 @@
 import asyncio
 import discord
+from random import seed
+from random import randint
 from discord.ext import commands
 import youtube_dl
 
@@ -13,6 +15,7 @@ class Music(commands.Cog):
         self.queue = []
         self.bReachedEnd = False
         self.bLoop = False
+        self.time = 0
         
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):   
@@ -22,8 +25,33 @@ class Music(commands.Cog):
             self.voice = None
             self.bLoop = False
             self.bReachedEnd = False
+        elif before.channel is None:
+            while True:
+                await asyncio.sleep(1)
+                self.time = self.time + 1
+                if self.voice.is_playing() and not self.voice.is_paused():
+                    self.time = 0
+                if self.time == 600: 
+                    await self.ctx.send("Bot disconnected due to inactivity")
+                    await self._disconnectBot(self.ctx)
+                    return
+                if not self.voice.is_connected():
+                    break
 
-    
+    @commands.command(aliases=['shuffle'])
+    async def _shuffle(self, pCtx):
+        seed(69)
+        queueLength = len(self.queue)
+        count = randint(queueLength * 2,  queueLength * 5)
+        for _ in range(count):
+            index1 = randint(1,queueLength-1)
+            index2 = randint(1,queueLength-1)
+            temp = self.queue[index1]
+            self.queue[index1] = self.queue[index2]
+            self.queue[index2] = temp
+        await pCtx.send("Shuffled the queue")
+        
+            
     @commands.command(aliases=['play','p'])
     async def _play(self, pCtx, *inputStr : str):
         if not pCtx.message.author.voice:
@@ -127,7 +155,6 @@ class Music(commands.Cog):
         except:
             return False
             
-
     @commands.command(name='skip')
     async def _skip(self,pCtx):
         prevSongTitle = ''
