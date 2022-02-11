@@ -1,6 +1,7 @@
 import asyncio
 from coinflip import Coinflip
 import blackjack
+import hangman
 from dice import Dice
 import discord
 from discord import user
@@ -15,6 +16,7 @@ class Casino(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.bjSessions = []
+        self.hmSessions = []
         
     @commands.Cog.listener()
     async def on_command_error(self, pCtx, error):
@@ -50,6 +52,27 @@ class Casino(commands.Cog):
     @commands.command(name='coinflip')
     async def cf(self, pCtx, amount : int, guess, otherPlayer = None):
         game = Coinflip(self.bot, pCtx.message, guess, amount, otherPlayer)
+        await game.start()
+
+    @commands.command(name='hangman')
+    async def hm(self,pCtx,amount:int):
+        if amount < 0:
+            await pCtx.send("Can't bet a negative amount")
+            return
+        ID = pCtx.message.author.id
+        #for game in self.hmSessions:
+        #    if game.player == ID:
+        #        await pCtx.send("You're already in a hangman game")
+        #        return
+        user = await self.bot.db.koomdata.find_one({'_uid':int(ID)})
+        if user['_currency'] < amount:
+            await pCtx.send("Not enough money to gamble")
+            return
+        try:
+            game = hangman.HangmanGame(self.bot, pCtx.message, amount, self.hmSessions)
+        except Exception as e:
+            print(e)
+        self.hmSessions.append(game)
         await game.start()
 
     @commands.command(name='blackjack')

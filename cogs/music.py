@@ -14,15 +14,21 @@ class Music(commands.Cog):
         self.pointer = 0
         self.queue = []
         self.bReachedEnd = False
+        self.bLoopQueue = False
         self.bLoop = False
         self.time = 0
         
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):   
+
+        if self.voice is None and self.ctx is not None:
+            self.voice = discord.utils.get(self.bot.voice_clients, guild=self.ctx.guild)
+
         if before.channel is not None and after.channel is None:
             self.queue = []
             self.pointer = 0
             self.voice = None
+            self.bLoopQueue = False
             self.bLoop = False
             self.bReachedEnd = False
         elif before.channel is None:
@@ -51,6 +57,19 @@ class Music(commands.Cog):
             self.queue[index2] = temp
         await pCtx.send("Shuffled the queue")
         
+    @commands.command(aliases=['seek','goto'])
+    async def _seekSong(self,pCtx,inputStr : str):
+        secondsTime = 0
+        try:
+            secondsTime = int(inputStr)
+        except:
+            parsedTime = inputStr.split(':')
+            seconds = parsedTime.pop()
+            minutes = parsedTime.pop()
+            hours = parsedTime.pop()
+            secondsTime = seconds + (minutes*60) + (hours*3600)
+        self._playSong(pCtx, secondsTime)
+
             
     @commands.command(aliases=['play','p'])
     async def _play(self, pCtx, *inputStr : str):
@@ -83,16 +102,15 @@ class Music(commands.Cog):
         itemRemoved = self.queue.pop(posToRemove)
         await pCtx.send("Removed: " + itemRemoved['title'])
 
-
     @commands.command(aliases=['join','summon'])
     async def _summon(self, pCtx):
         if not pCtx.message.author.voice:
-            print('Not in vc')
-            await pCtx.send("You're not in a voice channel cunt")
+            print("You're not in a voice chat for me to join")
+            await pCtx.send("You're not in a voice channel :(")
             return
-        if self.voice is None:
-            await self._connect(pCtx)
-            self.ctx = pCtx
+
+        await self._connect(pCtx)
+        self.ctx = pCtx
 
     @commands.command(aliases=['queue', 'q'])
     async def _queue(self,pCtx):
@@ -131,13 +149,28 @@ class Music(commands.Cog):
 
     @commands.command(aliases=['lq','loopqueue','loopq'])
     async def _loopQueue(self, pCtx):
-        self.bLoop = not self.bLoop
-        if self.bLoop:
+        self.bLoopQueue = not self.bLoopQueue
+        if self.bLoopQueue:
             await pCtx.send("Now looping queue!")
             self.bReachedEnd = False
         else:
             await pCtx.send("Now un-looping queue!")
             if (self.pointer == len(self.queue)-1):
+                self.bReachedEnd = True
+
+    @commands.command(aliases=['loop', 'l'])
+    async def _loopSong(self,pCtx):
+        self.bLoop = not self.bLoop
+        if self.bLoop:
+            await pCtx.send("Now looping the current song.")
+            if self.bReachedEnd:
+                self.bReachedEnd = False
+                if not self.voice.is_playing():
+                    self.pointer = self.pointer - 1
+                    self._playSong(pCtx)
+        else:
+            await pCtx.send("Now un-looping the current song.")
+            if self.pointer >= len(self.queue):
                 self.bReachedEnd = True
 
     @commands.command(aliases=['dc','disconnect'])
@@ -157,19 +190,17 @@ class Music(commands.Cog):
             
     @commands.command(name='skip')
     async def _skip(self,pCtx):
-        prevSongTitle = ''
         self.voice = discord.utils.get(self.bot.voice_clients, guild=pCtx.guild)
         if self.voice is None:
             await pCtx.send("Koom is not in a chat!")
             return False
         if len(self.queue) > 0:
-            prevSongTitle = self.queue[self.pointer]['title']
-            if not self.bReachedEnd or self.bLoop:
+            if not self.bReachedEnd or self.bLoopQueue or self.bLoop:
                 try:
                     self.voice.stop()
                 except:
                     return False
-                await pCtx.send(f"Skipped song: [{prevSongTitle}]")
+                await pCtx.send(f"Skipped song")
                 self._playSong(pCtx)
                 currSongTitle = self.queue[self.pointer]['title']
                 await pCtx.send(f"Now playing: [{currSongTitle}]")
@@ -181,15 +212,17 @@ class Music(commands.Cog):
             await pCtx.send("Reached end of queue!")
     
     def _incrementPointer(self):
+        if (self.bLoop):
+            return
         self.pointer += 1
         if self.pointer >= len(self.queue):
-            if self.bLoop:
+            if self.bLoopQueue:
                 self.pointer = 0
             else:
                 self.bReachedEnd = True
 
     async def _connect(self, pCtx):
-        voiceChannel = self.bot.get_channel(pCtx.author.voice.channel.id)
+        voiceChannel = pCtx.author.voice.channel
         await voiceChannel.connect()
         self.voice = discord.utils.get(self.bot.voice_clients, guild=pCtx.guild)
 
@@ -220,18 +253,18 @@ class Music(commands.Cog):
                     await pCtx.send('Error: ' + str(e))
                     return False
 
-    
-    def _playSong(self,pCtx):
-        FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+    def _playSong(self,pCtx, optionalSeek = 0):
+        FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': f'-vn -ss {optionalSeek}'}
         try:
             self.voice.play(discord.FFmpegPCMAudio(self.queue[self.pointer]['hostURL'], **FFMPEG_OPTIONS), after=lambda e: self.after_song(pCtx))    
         except Exception as e:
-            #await pCtx.send('Error: ' + str(e))
+            #print(e)
+            print('Error playing song: ' + str(e))
             return False
 
     def after_song(self, pCtx):
         self._incrementPointer()
-        if not self.bReachedEnd or self.bLoop:
+        if not self.bReachedEnd or self.bLoopQueue or self.bLoop:
             self._playSong(pCtx)
 
     
