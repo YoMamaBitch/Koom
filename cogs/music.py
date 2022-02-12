@@ -1,4 +1,5 @@
 import asyncio
+import secrets
 import discord
 from random import seed
 from random import randint
@@ -16,6 +17,7 @@ class Music(commands.Cog):
         self.bReachedEnd = False
         self.bLoopQueue = False
         self.bLoop = False
+        self.bIgnoreAfter = False
         self.time = 0
         
     @commands.Cog.listener()
@@ -34,6 +36,8 @@ class Music(commands.Cog):
         elif before.channel is None:
             while True:
                 await asyncio.sleep(1)
+                if self.voice is None:
+                    return
                 self.time = self.time + 1
                 if self.voice.is_playing() and not self.voice.is_paused():
                     self.time = 0
@@ -68,7 +72,18 @@ class Music(commands.Cog):
             minutes = parsedTime.pop()
             hours = parsedTime.pop()
             secondsTime = seconds + (minutes*60) + (hours*3600)
+        if self.voice is not None:
+            if self.voice.is_playing():
+                self.voice.stop()
+                
+        if self.voice is None:
+            await pCtx.send("Am I in a channel?")
+            return
+        self.bIgnoreAfter = True
+        if self.voice.is_playing():
+            self.voice.stop()
         self._playSong(pCtx, secondsTime)
+        await pCtx.send(f"Skipping to {secondsTime}s")
 
             
     @commands.command(aliases=['play','p'])
@@ -77,7 +92,8 @@ class Music(commands.Cog):
             await pCtx.send("You are not in a voice chat!")
             return
         else:
-            await self._summon(pCtx)
+            if self.voice is None:
+                await self._summon(pCtx)
             request = ' '.join(inputStr)
             await self._enqueue(pCtx, request)
         if not pCtx.message.author.voice:
@@ -151,6 +167,8 @@ class Music(commands.Cog):
     async def _loopQueue(self, pCtx):
         self.bLoopQueue = not self.bLoopQueue
         if self.bLoopQueue:
+            if (self.pointer >= len(self.queue)):
+                self.pointer = 0
             await pCtx.send("Now looping queue!")
             self.bReachedEnd = False
         else:
@@ -211,6 +229,10 @@ class Music(commands.Cog):
                 return False
             await pCtx.send("Reached end of queue!")
     
+    @commands.command(name='pointer')
+    async def _getPointer(self, pCtx):
+        await pCtx.send(f"Pointer: {self.pointer}")
+
     def _incrementPointer(self):
         if (self.bLoop):
             return
@@ -259,13 +281,21 @@ class Music(commands.Cog):
             self.voice.play(discord.FFmpegPCMAudio(self.queue[self.pointer]['hostURL'], **FFMPEG_OPTIONS), after=lambda e: self.after_song(pCtx))    
         except Exception as e:
             #print(e)
+            #loop = asyncio.get_event_loop()
+            #loop.create_task(self.send_song_error_msg(e))
             print('Error playing song: ' + str(e))
             return False
 
     def after_song(self, pCtx):
+        if self.bIgnoreAfter:
+            self.bIgnoreAfter = False
+            return
         self._incrementPointer()
         if not self.bReachedEnd or self.bLoopQueue or self.bLoop:
             self._playSong(pCtx)
+
+    async def send_song_error_msg(self,error):
+        await self.ctx.send('Error playing song: ' + str(error))
 
     
 def setup(bot):
