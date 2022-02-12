@@ -87,6 +87,8 @@ class Music(commands.Cog):
 
     @commands.command(aliases=['clear','wipe'])
     async def _wipequeue(self,pCtx):
+        if self.voice is not None and self.voice.is_playing():
+            self.voice.stop()
         self.queue = []
         self.pointer = 0
         await pCtx.send("Cleared queue")
