@@ -12,7 +12,10 @@ class League(commands.Cog):
     @commands.command(name='last5')
     async def last5(self, pCtx, *SummName):
         SummonerName = ' '.join(SummName)
-        player = self.watcher.summoner.by_name('EUW1',SummonerName)
+        try:
+            player = self.watcher.summoner.by_name('EUW1',SummonerName)
+        except Exception as e:
+            print(e)
         puuid = player['puuid']
         matchlist = self.watcher.match.matchlist_by_puuid('EUROPE',puuid)
         embed = discord.Embed(title=f"{SummonerName}'s Last 5 Games", color=0x4287f5)
@@ -54,8 +57,6 @@ class League(commands.Cog):
             else:
                 win = "L"
             embed.add_field(name=f"{player_info['championName']} - {gameMode}", value=f"KDA: {round(kda,2)}\nOutcome: {win}", inline=False)
-
-
         await pCtx.send(embed=embed)
 
 def setup(bot):
