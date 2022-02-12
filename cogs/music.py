@@ -90,6 +90,7 @@ class Music(commands.Cog):
         if self.voice is not None and self.voice.is_playing():
             self.voice.stop()
         self.queue = []
+        await asyncio.sleep(1)
         self.pointer = 0
         await pCtx.send("Cleared queue")
             
