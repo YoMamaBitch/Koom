@@ -85,6 +85,11 @@ class Music(commands.Cog):
         self._playSong(pCtx, secondsTime)
         await pCtx.send(f"Skipping to {secondsTime}s")
 
+    @commands.command(aliases=['clear','wipe'])
+    async def _wipequeue(self,pCtx):
+        self.queue = []
+        self.pointer = 0
+        await pCtx.send("Cleared queue")
             
     @commands.command(aliases=['play','p'])
     async def _play(self, pCtx, *inputStr : str):
