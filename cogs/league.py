@@ -21,16 +21,55 @@ class League(commands.Cog):
         self.iconURL = f"https://ddragon.leagueoflegends.com/cdn/{icon_version}/img/profileicon/"
         self.champURL = f"https://ddragon.leagueoflegends.com/cdn/{icon_version}/img/champion/"
         
+    async def _getMatchRegionFromRegion(self, Region):
+        if Region == 'EUW1' or Region == 'EUN1' or Region == 'RU' or Region == 'TR1':
+            return "EUROPE"
+        elif Region == 'LA1' or Region == 'LA2' or Region == 'NA1':
+            return "AMERICAS"
+        elif Region == 'OC1' or Region == 'JP1' or Region == 'KR':
+            return "ASIA"
+        return None
+    
+    async def _getSummonerNameAndRegion(self, *SummName):
+        try:
+            SummonerName = ' '.join(SummName)
+            if SummonerName.find('#') == -1:
+                Region = 'EUW1'
+                return (SummonerName, 'EUW1')
+            Region = SummonerName.split('#')[1]
+        except Exception as e:
+            print(e)
+
+        if Region == 'EUW':
+            Region = 'EUW1'
+        elif Region == 'BR':
+            Region = 'BR1'
+        elif Region == 'EUN':
+            Region = 'EUN1'
+        elif Region == 'JP':
+            Region = 'JP1'
+        elif Region == 'NA':
+            Region = 'NA1'
+        elif Region == 'OC':
+            Region = 'OC1'
+        elif Region == 'TR':
+            Region = 'TR1'
+
+        SummonerName = SummonerName.split('#')[0]
+        return (SummonerName,Region)
+
     @commands.command(aliases=['league_rank', 'leaguerank'])
     async def _getrank(self ,pCtx, *SummName):
-        SummonerName = ' '.join(SummName)
+        SummonerNameReg = await self._getSummonerNameAndRegion(*SummName)
+        SummonerName = SummonerNameReg[0]
+        Region = SummonerNameReg[1]
         try:
-            player = self.watcher.summoner.by_name('EUW1',SummonerName)
+            player = self.watcher.summoner.by_name(Region,SummonerName)
         except Exception as e:
             print(e)
         id = player['id']
         try:
-            data = self.watcher.league.by_summoner('EUW1', id)
+            data = self.watcher.league.by_summoner(Region, id)
         except Exception as e:
             print(e)
         for entry in data:
@@ -50,14 +89,16 @@ class League(commands.Cog):
 
     @commands.command(aliases=['league_current','leaguecurrent'])
     async def _currentgame(self, pCtx, *SummName):
-        SummonerName = ' '.join(SummName)
+        SummonerNameReg = await self._getSummonerNameAndRegion(*SummName)
+        SummonerName = SummonerNameReg[0]
+        Region = SummonerNameReg[1]
         try:
-            player = self.watcher.summoner.by_name('EUW1',SummonerName)
+            player = self.watcher.summoner.by_name(Region,SummonerName)
         except Exception as e:
             print(e)
         id = player['id']
         try:
-            current_game_info = self.watcher.spectator.by_summoner('EUW1', id)
+            current_game_info = self.watcher.spectator.by_summoner(Region, id)
         except Exception as e:
             await pCtx.send(f"{SummonerName} is not in a match right now.")
     
@@ -134,17 +175,23 @@ class League(commands.Cog):
         
     @commands.command(aliases=['league_last5', 'leaguelast5'])
     async def _last5(self, pCtx, *SummName):
-        SummonerName = ' '.join(SummName)
+        SummonerNameReg = await self._getSummonerNameAndRegion(*SummName)
+        SummonerName = SummonerNameReg[0]
+        Region = SummonerNameReg[1]    
         try:
-            player = self.watcher.summoner.by_name('EUW1',SummonerName)
+            player = self.watcher.summoner.by_name(Region,SummonerName)
         except Exception as e:
             print(e)
         puuid = player['puuid']
-        matchlist = self.watcher.match.matchlist_by_puuid('EUROPE',puuid)
+        matchRegion = await self._getMatchRegionFromRegion(Region)
+        if matchRegion is None:
+            await pCtx.send("Error getting region data")
+            return
+        matchlist = self.watcher.match.matchlist_by_puuid(matchRegion,puuid)
         embed = discord.Embed(title=f"{SummonerName}'s Last 5 Games", color=0x4287f5)
         for i in range(0,5):
             try:
-                match = self.watcher.match.by_id('EUROPE',matchlist[i])
+                match = self.watcher.match.by_id(matchRegion,matchlist[i])
             except Exception as e:
                 print(e)
             for j in range(0,len(match['metadata']['participants'])):
