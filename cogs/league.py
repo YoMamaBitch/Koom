@@ -21,7 +21,7 @@ class League(commands.Cog):
         self.iconURL = f"https://ddragon.leagueoflegends.com/cdn/{icon_version}/img/profileicon/"
         self.champURL = f"https://ddragon.leagueoflegends.com/cdn/{icon_version}/img/champion/"
         
-    @commands.command(aliases=['rank'])
+    @commands.command(aliases=['league_rank', 'leaguerank'])
     async def _getrank(self ,pCtx, *SummName):
         SummonerName = ' '.join(SummName)
         try:
@@ -48,7 +48,7 @@ class League(commands.Cog):
         embed.set_footer(text=f"{str(soloData['tier']).capitalize()} {str(soloData['rank'])}")
         await pCtx.send(embed=embed)
 
-    @commands.command(aliases=['currentgame','current'])
+    @commands.command(aliases=['league_current','leaguecurrent'])
     async def _currentgame(self, pCtx, *SummName):
         SummonerName = ' '.join(SummName)
         try:
@@ -118,15 +118,9 @@ class League(commands.Cog):
             secondTree = "Resolve"
         elif perkSecondaryStyle == 8200:
             secondTree = "Sorcery"
-
-        if current_game_info['gameMode'] == "CLASSIC":
-            mode = "SR"
-        elif current_game_info['gameMode'] == "ARAM":
-            mode = "ARAM"
-        elif current_game_info['gameMode'] == "ONEFORALL":
-            mode = "OFA"
-        elif current_game_info['gameMode'] == "ULTBOOK":
-            mode = "ULTBOOK"
+            
+        mode = current_game_info['gameMode']
+        
         embed.set_thumbnail(url=self.champURL + champ['image']['full'])
         embed.add_field(name="Game Time",value=f"{gameMinutes}:{gameSeconds}", inline=True)
         embed.add_field(name="Mode", value=f"{mode}", inline=True)
@@ -138,7 +132,7 @@ class League(commands.Cog):
         embed.add_field(name="2º Rune Tree", value=f'{secondTree}', inline=True)
         await pCtx.send(embed=embed)
         
-    @commands.command(name='last5')
+    @commands.command(aliases=['league_last5', 'leaguelast5'])
     async def _last5(self, pCtx, *SummName):
         SummonerName = ' '.join(SummName)
         try:
