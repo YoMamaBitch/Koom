@@ -5,10 +5,13 @@ from discord.ext import commands
 from riotwatcher import LolWatcher, ApiError
 import secrets
 import asyncio
+from bson.objectid import ObjectId
 
 class League(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.database = self.bot.db.league_friends
+        self.activeQueries = []
         self.watcher = LolWatcher(secrets.riotKey)
         versions = self.watcher.data_dragon.versions_for_region('euw')
         champions_version = versions['n']['champion']
@@ -20,7 +23,126 @@ class League(commands.Cog):
         self.runesList = self.watcher.data_dragon.runes_reforged(icon_version)
         self.iconURL = f"https://ddragon.leagueoflegends.com/cdn/{icon_version}/img/profileicon/"
         self.champURL = f"https://ddragon.leagueoflegends.com/cdn/{icon_version}/img/champion/"
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        for query in self.activeQueries:
+            if query == message.author.id:
+                #Check exists as a player
+                SNR = await self._getSummonerNameAndRegion(message.content)
+                try:
+                    self.watcher.summoner.by_name(SNR[1],SNR[0])
+                except Exception as e:
+                    await message.channel.send("That summoner doesn't exist. Try again.")
+                    return
+                result = await self.database.insert_one({'_uid':query})
+                await self.database.update_one({'_uid':query}, {'$set':{'_friends':[]}})
+                self.activeQueries.remove(query)
+                await message.channel.send("Successfully added :white_check_mark:")
+                return
+
+    @commands.command(aliases=['league_friends','leaguefriends','show_league_friends'])
+    async def _list_league_friends(self, pCtx):
+        try:
+            thisUser = await self.database.find_one({'_uid':pCtx.message.author.id})
+            if thisUser is None:
+                raise Exception("ThisUser was None")
+        except Exception as e:
+            self.activeQueries.append(pCtx.message.author.id)
+            await pCtx.send("You aren't in the League DB yet, fear not, type your summoner name with your #REGION at the end now, and you'll be added.")
+            return
+
+        try:
+            result = await self.database.find_one({'_uid':pCtx.message.author.id})
+        except Exception as e:
+            self.activeQueries.append(pCtx.message.author.id)
+            await pCtx.send("You aren't in the League DB yet, fear not, type your summoner name with your #REGION at the end now, and you'll be added.")
+            return
+        try:
+            embed = discord.Embed(title=f"{pCtx.author.display_name}'s Friend List", color=0x19126e)
+        except Exception as e:
+            print(e)
+        friends = result['_friends']
+        field_str = '\u200b'
+        for friend in friends:
+            temp = friend.split('#')
+            summoner = temp[0]
+            region = temp[1]
+            id = self.watcher.summoner.by_name(region, summoner)['id']
+            try:
+                game_info = self.watcher.spectator.by_summoner(region, id)
+                gameSeconds = game_info['gameLength']
+                gameMinutes = math.floor(gameSeconds/60)
+                gameSeconds = gameSeconds % 60
+                for i in game_info['participants']:
+                    if i['summonerName'] == summoner:
+                        player = i
+                        break
+                try:
+                    for value in self.champList['data'].values():
+                        if int(value['key']) == player['championId']:
+                            champ = value
+                            break
+                except Exception as e:
+                    print(e)
+                friend_status = f"{gameMinutes:02d}:{gameSeconds:02d} - {champ['id']}"
+            except Exception:
+                friend_status = "Not in match"     
+            
+            field_str += f'**{summoner}** - {friend_status}\n'
+        embed.add_field(name='\u200b', value=field_str, inline=False)
+        await pCtx.send(embed=embed)
+
+    @commands.command(aliases=['league_remove_friend','league_del_friend','leagueremovefriend','league_del','leaguedel','leagueremove','leaguedelfriend'])
+    async def _remove_league_friend(self, pCtx, *SummName):
+        try:
+            thisUser = await self.database.find_one({'_uid':pCtx.message.author.id})
+            if thisUser is None:
+                raise Exception("ThisUser was None")
+        except Exception as e:
+            self.activeQueries.append(pCtx.message.author.id)
+            await pCtx.send("You aren't in the League DB yet, fear not, type your summoner name with your #REGION at the end now, and you'll be added.")
+            return
+
+        SNR = await self._getSummonerNameAndRegion(*SummName)
+        try:
+            await self.database.update_one({'_uid':pCtx.message.author.id}, {'$pull':{'_friends':SNR[0]+'#'+SNR[1]}})
+        except Exception:
+            await pCtx.send("Error removing friend.")
+            return
+        await pCtx.send(f"Successfully removed {SNR[0]+'#'+SNR[1]} from your league friends list.")
         
+    @commands.command(aliases=['league_add_friend', 'leagueadd', 'league_add', 'leagueaddfriend'])
+    async def _add_league_friend(self, pCtx, *SummName):
+
+        #Get current discord user from Database
+        try:
+            thisUser = await self.database.find_one({'_uid':pCtx.message.author.id})
+            if thisUser is None:
+                raise Exception("ThisUser was None")
+        except Exception as e:
+            self.activeQueries.append(pCtx.message.author.id)
+            await pCtx.send("You aren't in the League DB yet, fear not, type your summoner name with your #REGION at the end now, and you'll be added.")
+            return
+
+        SNR = await self._getSummonerNameAndRegion(*SummName)
+        SummonerName = SNR[0]
+        Region = SNR[1]
+        try:
+            self.watcher.summoner.by_name(Region,SummonerName)
+        except ApiError as e:
+            if e.response.status_code == 404:
+                await pCtx.send("No summoner with that name found.")
+                return
+            else:
+                raise
+        for friend in thisUser['_friends']:
+            if friend == SNR[0]+SNR[1]:
+                await pCtx.send("You've already added this player on your friends list.")
+                return
+        await self.database.update_one({'_uid':pCtx.message.author.id}, {'$push':{'_friends':SNR[0]+'#'+SNR[1]}})
+        await pCtx.send(f"Successfully added {SNR[0] + '#' + SNR[1]} to your friends list.")
+
     async def _getMatchRegionFromRegion(self, Region):
         if Region == 'EUW1' or Region == 'EUN1' or Region == 'RU' or Region == 'TR1':
             return "EUROPE"
