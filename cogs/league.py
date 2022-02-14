@@ -103,14 +103,21 @@ class League(commands.Cog):
             self.activeQueries.append(pCtx.message.author.id)
             await pCtx.send("You aren't in the League DB yet, fear not, type your summoner name with your #REGION at the end now, and you'll be added.")
             return
-
         SNR = await self._getSummonerNameAndRegion(*SummName)
         try:
-            await self.database.update_one({'_uid':pCtx.message.author.id}, {'$pull':{'_friends':SNR[0]+'#'+SNR[1]}})
+            friend = self.watcher.summoner.by_name(SNR[1],SNR[0])
+        except ApiError as e:
+            if e.response.status_code == 404:
+                await pCtx.send("No summoner with that name found.")
+                return
+            else:
+                raise
+        try:
+            await self.database.update_one({'_uid':pCtx.message.author.id}, {'$pull':{'_friends':friend['name']+'#'+SNR[1]}})
         except Exception:
             await pCtx.send("Error removing friend.")
             return
-        await pCtx.send(f"Successfully removed {SNR[0]+'#'+SNR[1]} from your league friends list.")
+        await pCtx.send(f"Successfully removed {friend['name']+'#'+SNR[1]} from your league friends list.")
         
     @commands.command(aliases=['league_add_friend', 'leagueadd', 'league_add', 'leagueaddfriend'])
     async def _add_league_friend(self, pCtx, *SummName):
@@ -129,7 +136,7 @@ class League(commands.Cog):
         SummonerName = SNR[0]
         Region = SNR[1]
         try:
-            self.watcher.summoner.by_name(Region,SummonerName)
+            new_friend = self.watcher.summoner.by_name(Region,SummonerName)
         except ApiError as e:
             if e.response.status_code == 404:
                 await pCtx.send("No summoner with that name found.")
@@ -137,11 +144,11 @@ class League(commands.Cog):
             else:
                 raise
         for friend in thisUser['_friends']:
-            if friend == SNR[0]+SNR[1]:
+            if friend == new_friend['name']+SNR[1]:
                 await pCtx.send("You've already added this player on your friends list.")
                 return
-        await self.database.update_one({'_uid':pCtx.message.author.id}, {'$push':{'_friends':SNR[0]+'#'+SNR[1]}})
-        await pCtx.send(f"Successfully added {SNR[0] + '#' + SNR[1]} to your friends list.")
+        await self.database.update_one({'_uid':pCtx.message.author.id}, {'$push':{'_friends':new_friend['name']+'#'+SNR[1]}})
+        await pCtx.send(f"Successfully added {new_friend['name'] + '#' + SNR[1]} to your friends list.")
 
     async def _getMatchRegionFromRegion(self, Region):
         if Region == 'EUW1' or Region == 'EUN1' or Region == 'RU' or Region == 'TR1':
