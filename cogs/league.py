@@ -194,6 +194,7 @@ class League(commands.Cog):
         Region = SummonerNameReg[1]
         try:
             player = self.watcher.summoner.by_name(Region,SummonerName)
+            SummonerName = player['name']
         except Exception as e:
             print(e)
         id = player['id']
@@ -232,8 +233,9 @@ class League(commands.Cog):
             await pCtx.send(f"{SummonerName} is not in a match right now.")
     
         for i in current_game_info['participants']:
-            if i['summonerName'] == SummonerName:
+            if i['summonerName'].lower() == SummonerName:
                 player = i
+                SummonerName = i['summonerName']
                 break
         try:
             for value in self.champList['data'].values():
