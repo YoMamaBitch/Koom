@@ -233,7 +233,7 @@ class League(commands.Cog):
             await pCtx.send(f"{SummonerName} is not in a match right now.")
     
         for i in current_game_info['participants']:
-            if i['summonerName'].lower() == SummonerName:
+            if i['summonerName'].lower() == SummonerName.lower():
                 player = i
                 SummonerName = i['summonerName']
                 break
