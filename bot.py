@@ -10,10 +10,12 @@ bot.mongo = motor.motor_asyncio.AsyncIOMotorClient(str(secrets.mongoKey))
 bot.db = bot.mongo.userdata
 @bot.command()
 async def load(ctx,extension):
+    await ctx.send(f"Loaded {extension}")
     bot.load_extension(f'cogs.{extension}')
 
 @bot.command()
 async def unload(ctx,extension):
+    await ctx.send(f"Unloaded {extension}")
     bot.unload_extension(f'cogs.{extension}')
 
 for file in os.listdir('./cogs'):

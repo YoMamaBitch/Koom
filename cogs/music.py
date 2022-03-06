@@ -48,6 +48,24 @@ class Music(commands.Cog):
                 if not self.voice.is_connected():
                     break
 
+    @commands.command(aliases=['forcejoin','sendbot'])
+    async def _sendbotToChannel(self, pCtx, *inputStr):
+        my_input = ' '.join(inputStr)
+        if pCtx.message.author.id != secrets.keironID:
+            return
+        if self.voice is not None:
+            await self.voice.move_to(int(my_input.split(' ')[0]))
+        else:
+            voiceChannel = self.bot.get_channel(int(my_input.split(' ')[0]))
+        if voiceChannel is None:
+            print("Despacito")
+        await voiceChannel.connect()
+        self.voice = discord.utils.get(self.bot.voice_clients, guild=pCtx.guild)
+        tt = my_input.split(' ')[1]
+        await self._enqueue(pCtx, my_input.split(' ')[1])
+        await self._playSong(pCtx)
+        
+
     @commands.command(aliases=['shuffle'])
     async def _shuffle(self, pCtx):
         seed(69)
@@ -254,6 +272,7 @@ class Music(commands.Cog):
     async def _connect(self, pCtx):
         voiceChannel = pCtx.author.voice.channel
         await voiceChannel.connect()
+        await pCtx.guild.change_voice_state(channel=voiceChannel, self_mute=False, self_deaf=True)
         self.voice = discord.utils.get(self.bot.voice_clients, guild=pCtx.guild)
 
     async def _enqueue(self, pCtx, inputStr : str):
