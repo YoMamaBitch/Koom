@@ -1,9 +1,185 @@
-import json, requests, discord, os, hashlib, asyncio, secrets, urllib.request
+import json, requests, discord, os, hashlib, asyncio, secrets, urllib.request, datetime
 from discord.ext import commands
 from riotwatcher import ValWatcher
 from PIL import Image
 
 class Valorant(commands.Cog):
+
+    def __init__(self, bot):
+        self.bot = bot
+        self.database = self.bot.db.valorant_data
+        self.watcher = ValWatcher(secrets.valKey)
+        self.active_messages = []
+        self.active_matches = []
+        self.initialiseMaps()
+        self.initialiseContent()
+
+    @commands.Cog.listener()
+    async def on_message(self, user_msg):
+        for match in self.active_matches:
+            if match[0] == user_msg.author.id:
+                self.active_matches.remove(match)
+                break
+        for msg in self.active_messages:
+            if msg[0] == user_msg.author.id:
+                try:
+                    user_choice = int(user_msg.content)
+                except Exception as e:
+                    self.active_messages.remove(msg)
+                    return
+            #schema: AuthorID, Match_Data, Overview? (Whether to display image), Round to display (0 = Overview), discord_msg, player_puuid
+            self.active_matches.append((user_msg.author.id, msg[2][user_choice-1], True, 0, msg[1], msg[3]))
+            await msg[1].add_reaction('⏺️')
+            await msg[1].add_reaction('⬅️')
+            await msg[1].add_reaction('➡️')
+            self.active_messages.remove(msg)
+            await self.editMessage(self.active_matches[len(self.active_matches)-1])
+            return
+
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction, user):
+        for msg in self.active_matches:
+            if msg[0] == user.id:
+                await self.parse_emoji(reaction, msg)
+
+    async def displayOverview(self, match_data, player_puuid, discord_msg):
+        player_data = self.getPlayerDataFromMatch(match_data, player_puuid)
+        player_stats = player_data['stats']
+        player_won = self.getPlayerWinFromMatch(match_data,player_data)
+        if player_won:
+            color = 0x2bbd59
+        else:
+            color = 0xab281a
+        agent_name = self.getCharacterFromID(player_data['characterId'])
+        embed = discord.Embed(title=f"{player_data['gameName']} - {agent_name}",color=color)
+        map = self.getMapFromID(match_data['matchInfo']['mapId'])
+        length = datetime.datetime.fromtimestamp(match_data['matchInfo']['gameLengthMillis']/1000.0).strftime('%M:%S')
+        queue = match_data['matchInfo']['queueId'].capitalize()
+        embed.set_author(name=f'{map} - {length} - {queue}')
+        map_url = self.getMapImageUrlFromID(match_data['matchInfo']['mapId'])
+        embed.set_thumbnail(url=f'{map_url}')
+        match_score = self.getMatchScore(match_data,player_data)
+        embed.set_footer(text=f'Final Score: {match_score}')
+        kills = player_stats['kills']
+        deaths = player_stats['deaths']
+        assists = player_stats['assists']
+        embed.add_field(name='Kills',value=f'{kills}')
+        embed.add_field(name='Deaths',value=f'{deaths}')
+        embed.add_field(name='Assists',value=f'{assists}')
+        grenade_stats = self.getAbilityStats(player_data, "Grenade")
+        ability1_stats = self.getAbilityStats(player_data, "Ability1")
+        ability2_stats = self.getAbilityStats(player_data, "Ability2")
+        ult_stats = self.getAbilityStats(player_data, "Ultimate")
+        embed.add_field(name=f'{grenade_stats[0]}', value=f'{grenade_stats[1]}')
+        embed.add_field(name=f'{ability1_stats[0]}', value=f'{ability1_stats[1]}')
+        embed.add_field(name=f'{ability2_stats[0]}', value=f'{ability2_stats[1]}')
+        embed.add_field(name='\u200b', value='\u200b')
+        embed.add_field(name=f'{ult_stats[0]}', value=f'{ult_stats[1]}')
+        embed.add_field(name='\u200b', value='\u200b')
+
+        characters = self.getCharacterListFromMatch(match_data, player_puuid)
+        imagePath = self.compositeMatchImage(characters) 
+        file = discord.File(imagePath, filename="image.png")
+        vKChannel = self.bot.get_channel(886389462769217536)
+        img_msg = await vKChannel.send(file=file)
+        img_url = img_msg.attachments[0].url
+        embed.set_image(url=img_url)
+        await discord_msg.edit(embed=embed)
+        os.remove(imagePath)
+
+    async def displayRound(self, match_data, player_puuid, round, discord_msg):
+        test = 0
+
+    def compositeMatchImage(self, characters):
+        b_img = Image.open('cogs/val_character_images/game_background.png')
+        xPos = -60
+        yPos = 150
+        for x in characters[0]:
+            char_img = Image.open(f'cogs/val_character_images/{x}.png')
+            char_img.thumbnail((256,256), Image.ANTIALIAS)
+            b_img.paste(char_img, (xPos,yPos), char_img)
+            xPos += 110
+        xPos += 200
+        for x in characters[1]:
+            char_img = Image.open(f'cogs/val_character_images/{x}.png')
+            char_img.thumbnail((256,256), Image.ANTIALIAS)
+            b_img.paste(char_img, (xPos,yPos), char_img)
+            xPos += 110
+        filePath = f"cogs/{datetime.datetime.now().strftime('%H-%M-%S')}.png"
+        b_img.save(filePath)
+        return filePath
+
+    def getAbilityStats(self, player_data, ability):
+        characters = self.content['characters']
+        player_stats = player_data['stats']
+        for x in characters:
+            if x['id'] == player_data['characterId'].upper():
+                character_to_get = x
+        ability_name = character_to_get['abilities'][f'{ability}']['name']['defaultText']
+        ability_name = ability_name.title()
+        ability_casts = ability.lower() + "Casts"
+        player_uses = player_stats['abilityCasts'][f'{ability_casts}']
+        return (ability_name, player_uses)
+
+    def getMatchScore(self, match_data, player_data):
+        for x in match_data['teams']:
+            if x['teamId'] == 'Blue':
+                blue_score = x['roundsWon']
+            else:
+                red_score = x['roundsWon']
+        if player_data['teamId'] == 'Blue':
+            return f"{blue_score}-{red_score}"
+        else:
+            return f"{red_score}-{blue_score}"
+
+    @commands.command(aliases=['val_browse', 'valbrowse','val_list','vallist'])
+    async def listmatches(self, pCtx):
+        if not await self.checkForMention(pCtx):
+            return
+        discord_id = pCtx.message.mentions[0].id
+        if not await self.checkAuthenticated(pCtx,discord_id):
+            return
+        match_history = await self.getPlayerMatchHistory(discord_id)
+        hashed_id = self.getHash(discord_id)
+        player_data = await self.database.find_one({'_uid':hashed_id})
+        player_puuid = player_data['_puuid']
+        matches = []
+        for x in range(0,10):
+            matches.append(self.getMatchFromID(match_history[x]['matchId']))
+        icon_url = self.getPlayerIconFromMatch(player_puuid,matches[0])
+        icon_url = f"https://thebestcomputerscientist.co.uk/valorant_content/playercards/{icon_url}.png"
+        player_title = self.getPlayerTitleFromMatch(player_puuid, matches[0])
+        embed = discord.Embed(title=f"Match History", color=0x32a8a0)
+        embed.set_author(name=f"{pCtx.message.mentions[0].display_name}")
+        embed.set_thumbnail(url=icon_url)
+        embed.set_footer(text=f'{player_title}')
+        descriptionText = ""
+        for x in range(0,10):
+            descriptionText += f'{x+1}. '
+            player_match_data = self.getPlayerDataFromMatch(matches[x],player_puuid)
+            character_name = self.getCharacterFromID(player_match_data['characterId'])
+            map_name = self.getMapFromID(matches[x]['matchInfo']['mapId'])
+            descriptionText += f'{character_name} - {map_name}\n'
+        embed.add_field(name='\u200b',value=f'{descriptionText}', inline=False)
+        msg = await pCtx.send(embed=embed)
+        self.active_messages.append((pCtx.message.author.id, msg, matches, player_puuid))
+
+    @commands.command(aliases=['val_recentmatch'])
+    async def findonematch(self,pCtx):
+        if not await self.checkForMention(pCtx):
+            return
+        discord_id = pCtx.message.mentions[0].id
+        if not await self.checkAuthenticated(pCtx, discord_id):
+            return
+
+        match_history = await self.getPlayerMatchHistory(discord_id)
+        for x in match_history:
+            if x['queueId'] != 'unrated':
+                continue
+            match_index = x
+            break
+        match_data = self.watcher.match.by_id('EU',match_index['matchId'])
+        #player_data = self.findPlayerDataFromMatch(match_data, player_puuid)
 
     def initialiseMaps(self):
         map_names = []
@@ -12,7 +188,7 @@ class Valorant(commands.Cog):
         json_data = json.loads(text)
         for x in json_data['data']:
             map_names.append(x['uuid'])
-        for filename in os.listdir('cogs\\val_map_data'):
+        for filename in os.listdir('cogs/val_map_data'):
             if map_names.__contains__(filename):
                 map_names.remove(filename)
         for x in map_names:
@@ -29,7 +205,7 @@ class Valorant(commands.Cog):
             if img_url is None:
                 continue
             with urllib.request.urlopen(img_url) as url:
-                with open(f'cogs\\val_map_data\\{x}map.jpg', 'wb') as f:
+                with open(f'cogs/val_map_data\\{x}map.jpg', 'wb') as f:
                     f.write(url.read())
 
     def initialiseContent(self):
@@ -40,7 +216,7 @@ class Valorant(commands.Cog):
         #    return
         #version = '0'
         try:
-            with open('cogs\\val_content_en_gb', encoding='utf8') as json_file:
+            with open('cogs/val_content_en_gb.json', encoding='utf8') as json_file:
                 data = json.load(json_file)
                 self.content = data
                 #version = data['version']
@@ -56,7 +232,7 @@ class Valorant(commands.Cog):
             if 'id' not in x:
                 continue
             if x['id'] == id.upper():
-                return x['name']
+                return x['name']['defaultText']
         
     def getMapFromID(self, id):
         maps = self.content['maps']
@@ -64,15 +240,30 @@ class Valorant(commands.Cog):
             if 'assetPath' not in x:
                 continue
             if x['assetPath'] == id:
-                return x['name']
+                return x['name']['defaultText']
 
     def getMatchFromID(self, matchID):
         return self.watcher.match.by_id('EU',matchID)
+    
+    def getMapImageUrlFromID(self, mapId):
+        maps = self.content['maps']
+        for x in maps:
+            if 'assetPath' not in x:
+                continue
+            if x['assetPath'] == mapId:
+                id = x['id']
+                return f"https://thebestcomputerscientist.co.uk/valorant_content/maps/{id}.png"
 
     def getPlayerDataFromMatch(self, match_data, player_puuid):
         for x in match_data['players']:
             if x['puuid'] == player_puuid:
                 return x
+
+    def getPlayerWinFromMatch(self, match_data, player_data):
+        player_team = player_data['teamId']
+        for x in match_data['teams']:
+            if x['teamId'] == player_team:
+                return x['won']
 
     def getPlayerTitleFromMatch(self, puuid, match):
         title_id = self.getPlayerDataFromMatch(match,puuid)['playerTitle'].upper()
@@ -81,7 +272,7 @@ class Valorant(commands.Cog):
             if 'id' not in x:
                 continue
             if x['id'] == title_id:
-                return x['name'].replace('Title','')
+                return x['titleText']['defaultText'].replace('Title','')
 
     def getPlayerIconFromMatch(self, puuid, match):
         return self.getPlayerDataFromMatch(match, puuid)['playerCard'].upper()
@@ -98,13 +289,20 @@ class Valorant(commands.Cog):
             return False
         return True
 
-    def __init__(self, bot):
-        self.bot = bot
-        self.database = self.bot.db.valorant_data
-        self.watcher = ValWatcher(secrets.valKey)
-        self.initialiseMaps()
-        self.initialiseContent()
-        
+    def getCharacterListFromMatch(self, match_data, player_puuid):
+        red_players = []
+        blue_players = []
+        for x in match_data['players']:
+            if x['puuid'] == player_puuid:
+                player_team = x['teamId']
+            if x['teamId'] == 'Blue':
+                blue_players.append(x['characterId'].upper())
+            else:
+                red_players.append(x['characterId'].upper())
+        if player_team == 'Red':
+            return (red_players,blue_players)
+        return (blue_players, red_players)
+
     def getHash(self, data):
         hasher = hashlib.sha256()
         data_bytes = bytes(str(data), 'utf-8')
@@ -125,6 +323,23 @@ class Valorant(commands.Cog):
             await pCtx.send("They need to type 'bruh authenticate'")
             return False        
         return True
+
+    async def parse_emoji(self, reaction,match_tuple):
+        if reaction.emoji == ':record_button:':
+            match_tuple[2] = not match_tuple[2]
+        elif reaction.emoji == ':arrow_left:':
+            match_tuple[2] = False
+            match_tuple[3] = match_tuple[3] + 1
+        elif reaction.emoji == ':arrow_right:':
+            match_tuple[2] = False
+            match_tuple[3] = match_tuple[3] - 1
+        await self.editMessage(match_tuple)
+
+    async def editMessage(self, match_tuple):
+        if match_tuple[2]:
+            await self.displayOverview(match_tuple[1], match_tuple[5], match_tuple[4])
+            return
+        await self.displayRound(match_tuple[1], match_tuple[5], match_tuple[3], match_tuple[4])
     
     @commands.command(name='authenticate')
     async def authenticateRSO(self,pCtx):
@@ -134,56 +349,6 @@ class Valorant(commands.Cog):
         url = f"https://thebestcomputerscientist.co.uk/html/koom-authenticate.html?id={hashed_id}"
         user = self.bot.get_user(discord_id)
         await user.send(f"Click the following link: {url}\n\nDo not share this link with anyone")
-
-    @commands.command(aliases=['val_browse', 'valbrowse','val_list','vallist'])
-    async def listmatches(self, pCtx):
-        if not await self.checkForMention(pCtx):
-            return
-        discord_id = pCtx.message.mentions[0].id
-        if not await self.checkAuthenticated(pCtx,discord_id):
-            return
-        match_history = await self.getPlayerMatchHistory(discord_id)
-        hashed_id = self.getHash(discord_id)
-        player_data = await self.database.find_one({'_uid':hashed_id})
-        player_puuid = player_data['_puuid']
-        matches = []
-        for x in range(0,10):
-            matches.append(self.getMatchFromID(match_history[x]['matchId']))
-        icon_url = self.getPlayerIconFromMatch(player_puuid,matches[0])
-        icon_url = f"https://thebestcomputerscientist.co.uk/playercards/{icon_url}.png"
-        player_title = self.getPlayerTitleFromMatch(player_puuid, matches[0])
-        embed = discord.Embed(title=f"Match History", color=0x32a8a0)
-        embed.set_author(name=f"{pCtx.message.mentions[0].display_name}")
-        embed.set_thumbnail(url=icon_url)
-        embed.set_footer(text=f'{player_title}')
-        descriptionText = ""
-        for x in range(0,10):
-            descriptionText += f'{x+1}. '
-            player_match_data = self.getPlayerDataFromMatch(matches[x],player_puuid)
-            character_name = self.getCharacterFromID(player_match_data['characterId'])
-            map_name = self.getMapFromID(matches[x]['matchInfo']['mapId'])
-            descriptionText += f'{character_name} - {map_name}\n'
-        embed.add_field(name='\u200b',value=f'{descriptionText}', inline=False)
-
-        await pCtx.send(embed=embed)
-
-
-    @commands.command(aliases=['val_recentmatch'])
-    async def findonematch(self,pCtx):
-        if not await self.checkForMention(pCtx):
-            return
-        discord_id = pCtx.message.mentions[0].id
-        if not await self.checkAuthenticated(pCtx, discord_id):
-            return
-
-        match_history = await self.getPlayerMatchHistory(discord_id)
-        for x in match_history:
-            if x['queueId'] != 'unrated':
-                continue
-            match_index = x
-            break
-        match_data = self.watcher.match.by_id('EU',match_index['matchId'])
-        #player_data = self.findPlayerDataFromMatch(match_data, player_puuid)
 
 
 def setup(bot):
