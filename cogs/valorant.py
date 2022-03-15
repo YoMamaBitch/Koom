@@ -29,18 +29,20 @@ class Valorant(commands.Cog):
                     return
             #schema: AuthorID, Match_Data, Overview? (Whether to display image), Round to display (0 = Overview), discord_msg, player_puuid
             self.active_matches.append((user_msg.author.id, msg[2][user_choice-1], True, 0, msg[1], msg[3]))
+            self.active_messages.remove(msg)
+            await self.editMessage(self.active_matches[len(self.active_matches)-1])
             await msg[1].add_reaction('⏺️')
             await msg[1].add_reaction('⬅️')
             await msg[1].add_reaction('➡️')
-            self.active_messages.remove(msg)
-            await self.editMessage(self.active_matches[len(self.active_matches)-1])
             return
 
     @commands.Cog.listener()
     async def on_reaction_add(self, reaction, user):
         for msg in self.active_matches:
             if msg[0] == user.id:
-                await self.parse_emoji(reaction, msg)
+                new_msg = await self.parse_emoji(reaction, msg)
+                self.active_matches.remove(msg)
+                self.active_matches.append(new_msg)
 
     async def displayOverview(self, match_data, player_puuid, discord_msg):
         player_data = self.getPlayerDataFromMatch(match_data, player_puuid)
@@ -56,8 +58,8 @@ class Valorant(commands.Cog):
         length = datetime.datetime.fromtimestamp(match_data['matchInfo']['gameLengthMillis']/1000.0).strftime('%M:%S')
         queue = match_data['matchInfo']['queueId'].capitalize()
         embed.set_author(name=f'{map} - {length} - {queue}')
-        map_url = self.getMapImageUrlFromID(match_data['matchInfo']['mapId'])
-        embed.set_thumbnail(url=f'{map_url}')
+        gamemode_url = self.getGamemodeImageUrlFromId(match_data['matchInfo']['queueId'])
+        embed.set_thumbnail(url=f'{gamemode_url}')
         match_score = self.getMatchScore(match_data,player_data)
         embed.set_footer(text=f'Final Score: {match_score}')
         kills = player_stats['kills']
@@ -78,7 +80,7 @@ class Valorant(commands.Cog):
         embed.add_field(name='\u200b', value='\u200b')
 
         characters = self.getCharacterListFromMatch(match_data, player_puuid)
-        imagePath = self.compositeMatchImage(characters) 
+        imagePath = self.compositeMatchImage(characters,match_data['matchInfo']['mapId']) 
         file = discord.File(imagePath, filename="image.png")
         vKChannel = self.bot.get_channel(886389462769217536)
         img_msg = await vKChannel.send(file=file)
@@ -88,23 +90,67 @@ class Valorant(commands.Cog):
         os.remove(imagePath)
 
     async def displayRound(self, match_data, player_puuid, round, discord_msg):
-        test = 0
+        round_data = match_data['roundResults'][round-1]
+        player_team = self.getPlayerTeamFromMatch(match_data, player_puuid)
+        playerWon = round_data['winningTeam'] == player_team
+        if playerWon:
+            color = 0x2bbd59
+        else:
+            color = 0xab281a
+        round_result = round_data['roundResult'].title()
+        embed = discord.Embed(title=f'Result: {round_result}', color=color)
+        embed.set_author(name=f'Round: {round}')
+        self.setEmbedFooterForRound(embed, round_data)
+        player_round_data = self.getPlayerRoundData(round_data, player_puuid)
+        kills = self.getPlayerRoundKills(player_round_data['kills'])
+        damage = self.getPlayerRoundDamage(player_round_data['damage'])
+        eco = player_round_data['economy']['remaining']
+        embed.add_field(name='Kills',value=f'{kills}')
+        embed.add_field(name='Dmg',value=f'{damage}')
+        embed.add_field(name='Eco',value=f'${eco}')
+        await discord_msg.edit(embed=embed)
 
-    def compositeMatchImage(self, characters):
-        b_img = Image.open('cogs/val_character_images/game_background.png')
-        xPos = -60
+    def getPlayerRoundKills(self, kills):
+        return len(kills)
+
+    def getPlayerRoundDamage(self, round_damage):
+        sum = 0
+        for x in round_damage:
+            sum = sum + x['damage']
+        return sum
+
+    def setEmbedFooterForRound(self, embed, round_data):
+        ceremony = round_data['roundCeremony']
+        if ceremony == 'CeremonyDefault':
+            return
+
+    def getPlayerRoundData(self, round_data, player_puuid):
+        for x in round_data['playerStats']:
+            if x['puuid'] == player_puuid:
+                return x
+
+    def getPlayerTeamFromMatch(self, match_data, player_puuid):
+        for x in match_data['players']:
+            if x ['puuid'] == player_puuid:
+                player_team = x['teamId']
+                return player_team
+
+    def compositeMatchImage(self, characters, mapId):
+        map_id = self.getMapIdFromAssetPath(mapId)
+        b_img = Image.open(f'cogs/val_character_images/{map_id}.png')
+        xPos = -70
         yPos = 150
         for x in characters[0]:
             char_img = Image.open(f'cogs/val_character_images/{x}.png')
             char_img.thumbnail((256,256), Image.ANTIALIAS)
             b_img.paste(char_img, (xPos,yPos), char_img)
-            xPos += 110
-        xPos += 200
+            xPos += 115
+        xPos += 150
         for x in characters[1]:
             char_img = Image.open(f'cogs/val_character_images/{x}.png')
             char_img.thumbnail((256,256), Image.ANTIALIAS)
             b_img.paste(char_img, (xPos,yPos), char_img)
-            xPos += 110
+            xPos += 115
         filePath = f"cogs/{datetime.datetime.now().strftime('%H-%M-%S')}.png"
         b_img.save(filePath)
         return filePath
@@ -244,6 +290,13 @@ class Valorant(commands.Cog):
 
     def getMatchFromID(self, matchID):
         return self.watcher.match.by_id('EU',matchID)
+
+    def getGamemodeImageUrlFromId(self, modeId):
+        gameModes = self.content['gameModes']
+        for x in gameModes:
+            if x['name']['defaultText'] == modeId:
+                id = x['id']
+                return f"https://thebestcomputerscientist.co.uk/valorant_content/gamemodes/{id}.png"
     
     def getMapImageUrlFromID(self, mapId):
         maps = self.content['maps']
@@ -253,6 +306,14 @@ class Valorant(commands.Cog):
             if x['assetPath'] == mapId:
                 id = x['id']
                 return f"https://thebestcomputerscientist.co.uk/valorant_content/maps/{id}.png"
+    
+    def getMapIdFromAssetPath(self, mapAsset):
+        maps = self.content['maps']
+        for x in maps:
+            if 'assetPath' not in x:
+                continue
+            if x['assetPath'] == mapAsset:
+                return x['id']
 
     def getPlayerDataFromMatch(self, match_data, player_puuid):
         for x in match_data['players']:
@@ -325,15 +386,22 @@ class Valorant(commands.Cog):
         return True
 
     async def parse_emoji(self, reaction,match_tuple):
-        if reaction.emoji == ':record_button:':
-            match_tuple[2] = not match_tuple[2]
-        elif reaction.emoji == ':arrow_left:':
-            match_tuple[2] = False
-            match_tuple[3] = match_tuple[3] + 1
-        elif reaction.emoji == ':arrow_right:':
-            match_tuple[2] = False
-            match_tuple[3] = match_tuple[3] - 1
+        match_lower = 0
+        match_higher = match_tuple[1]['teams'][0]['roundsPlayed']
+        match_list = list(match_tuple)
+        if reaction.emoji == '⏺️':
+            match_list[2] = not match_list[2]
+        elif reaction.emoji == '⬅️':
+            match_list[2] = False
+            if match_list[3] > match_lower:
+                match_list[3] = match_list[3] - 1
+        elif reaction.emoji == '➡️':
+            match_list[2] = False
+            if match_list[3] < match_higher:
+                match_list[3] = match_list[3] + 1
+        match_tuple = tuple(match_list)
         await self.editMessage(match_tuple)
+        return match_tuple
 
     async def editMessage(self, match_tuple):
         if match_tuple[2]:
