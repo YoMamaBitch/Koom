@@ -27,8 +27,8 @@ class Valorant(commands.Cog):
                 except Exception as e:
                     self.active_messages.remove(msg)
                     return
-            #schema: AuthorID, Match_Data, Overview? (Whether to display image), Round to display (0 = Overview), discord_msg, player_puuid
-            self.active_matches.append((user_msg.author.id, msg[2][user_choice-1], True, 0, msg[1], msg[3]))
+            #schema: AuthorID, Match_Data, Overview? (Whether to display image), Round to display (0 = Overview), discord_msg, player_puuid, event_number
+            self.active_matches.append((user_msg.author.id, msg[2][user_choice-1], True, 0, msg[1], msg[3], 0))
             self.active_messages.remove(msg)
             await self.editMessage(self.active_matches[len(self.active_matches)-1])
             await msg[1].add_reaction('⏺️')
@@ -45,6 +45,10 @@ class Valorant(commands.Cog):
                 self.active_matches.append(new_msg)
 
     async def displayOverview(self, match_data, player_puuid, discord_msg):
+        my_bot = self.bot
+        my_reactions = discord_msg.reactions
+        await discord_msg.remove_reaction('◀️', member=self.bot.user)
+        await discord_msg.remove_reaction('▶️', member=self.bot.user)
         player_data = self.getPlayerDataFromMatch(match_data, player_puuid)
         player_stats = player_data['stats']
         player_won = self.getPlayerWinFromMatch(match_data,player_data)
@@ -78,7 +82,6 @@ class Valorant(commands.Cog):
         embed.add_field(name='\u200b', value='\u200b')
         embed.add_field(name=f'{ult_stats[0]}', value=f'{ult_stats[1]}')
         embed.add_field(name='\u200b', value='\u200b')
-
         characters = self.getCharacterListFromMatch(match_data, player_puuid)
         imagePath = self.compositeMatchImage(characters,match_data['matchInfo']['mapId']) 
         file = discord.File(imagePath, filename="image.png")
@@ -89,7 +92,10 @@ class Valorant(commands.Cog):
         await discord_msg.edit(embed=embed)
         os.remove(imagePath)
 
-    async def displayRound(self, match_data, player_puuid, round, discord_msg):
+    async def displayRound(self, match_data, player_puuid, round, discord_msg, event_index):
+        await discord_msg.add_reaction('◀️')
+        await discord_msg.add_reaction('▶️')
+        player_data = self.getPlayerDataFromMatch(match_data, player_puuid)
         round_data = match_data['roundResults'][round-1]
         player_team = self.getPlayerTeamFromMatch(match_data, player_puuid)
         playerWon = round_data['winningTeam'] == player_team
@@ -98,8 +104,8 @@ class Valorant(commands.Cog):
         else:
             color = 0xab281a
         round_result = round_data['roundResult'].title()
-        embed = discord.Embed(title=f'Result: {round_result}', color=color)
-        embed.set_author(name=f'Round: {round}')
+        embed = discord.Embed(title=f"{player_data['gameName']}'s Stats", color=color)
+        embed.set_author(name=f'Round: {round} - {round_result}')
         self.setEmbedFooterForRound(embed, round_data)
         player_round_data = self.getPlayerRoundData(round_data, player_puuid)
         kills = self.getPlayerRoundKills(player_round_data['kills'])
@@ -108,7 +114,75 @@ class Valorant(commands.Cog):
         embed.add_field(name='Kills',value=f'{kills}')
         embed.add_field(name='Dmg',value=f'{damage}')
         embed.add_field(name='Eco',value=f'${eco}')
+        embed.add_field(name='\u200b',value=f'Round Event Details',inline=False)
+        eventTimeline = self.getEventsInTimeline(round_data, match_data['players'])
+        event_to_display = eventTimeline[event_index]
+        if event_to_display[0] == 'bombplanted':
+            self.addBombPlantToEmbed(embed, event_to_display)
+        elif event_to_display[0] == 'bombdefused':
+            self.addBombDefuseToEmbed(embed,event_to_display)
+        else:
+            self.addKillToEmbed(embed,event_to_display)
         await discord_msg.edit(embed=embed)
+
+    def addKillToEmbed(self, embed, event):
+        time = datetime.datetime.fromtimestamp(event[1]/1000.0).strftime('%M:%S')
+        embed.add_field(name='\u200b',value=f'\u200b')
+        embed.add_field(name='Kill',value=f'{time}')
+        embed.add_field(name='\u200b',value=f'\u200b')
+        embed.add_field(name='Killer', value=f'{event[2]}')
+        embed.add_field(name='Victim', value=f'{event[3]}')
+        embed.add_field(name='Weapon',value=f'{event[4]}')
+
+    def addBombDefuseToEmbed(self, embed, event):
+        time = datetime.datetime.fromtimestamp(event[1]/1000.0).strftime('%M:%S')
+        embed.add_field(name='Bomb Defused',value=f'{time}')
+
+    def addBombPlantToEmbed(self, embed, event):
+        time = datetime.datetime.fromtimestamp(event[1]/1000.0).strftime('%M:%S')
+        embed.add_field(name='Bomb Planted',value=f'{time}')
+    
+    def getEventsInTimeline(self, round_data, players_data):
+        timeline = []
+        if round_data['bombPlanter'] is not None:
+            timeline.append(('bombplanted', round_data['plantRoundTime'], round_data['bombPlanter'], round_data['plantLocation'], round_data['plantPlayerLocations']))
+        if round_data['bombDefuser'] is not None:
+            timeline.append(('bombdefused', round_data['defuseRoundTime'], round_data['bombDefuser'], round_data['defuseLocation'], round_data['defusePlayerLocations']))
+        for x in round_data['playerStats']:
+            for y in x['kills']:
+                killer_char = self.getCharacterFromPUUID(players_data, y['killer'])
+                victim_char = self.getCharacterFromPUUID(players_data, y['victim'])
+                damageItem = y['finishingDamage']['damageItem']
+                if damageItem == '':
+                    finisher = y['finishingDamage']['damageType']
+                elif damageItem.__contains__('Ability'):
+                    finisher = self.getAbilityNameFromCharacter(killer_char, damageItem)
+                else:
+                    finisher = self.getFinishingWeaponFromID(damageItem)
+                timeline.append(('kill', y['timeSinceRoundStartMillis'], killer_char, victim_char, finisher, y['playerLocations']))
+        timeline = sorted(timeline, key=lambda x:x[1])
+        return timeline
+
+    def getAbilityNameFromCharacter(self, character, ability):
+        if ability == "GrenadeAbility":
+            ability = "Grenade"
+        characters = self.content['characters']
+        for x in characters:
+            if x['name']['defaultText'] == character:
+                for y in x['abilities']:
+                    if y == ability:
+                        return x['abilities'][y]['name']['defaultText']
+
+    def getFinishingWeaponFromID(self, itemID):
+        weapons = self.content['weapons']
+        for x in weapons:
+            if x['id'] == itemID:
+                return x['name']['defaultText']
+
+    def getCharacterFromPUUID(self, players_data, puuid):
+        for x in players_data:
+            if x['puuid'] == puuid:
+                return self.getCharacterFromID(x['characterId'])
 
     def getPlayerRoundKills(self, kills):
         return len(kills)
@@ -209,23 +283,6 @@ class Valorant(commands.Cog):
         embed.add_field(name='\u200b',value=f'{descriptionText}', inline=False)
         msg = await pCtx.send(embed=embed)
         self.active_messages.append((pCtx.message.author.id, msg, matches, player_puuid))
-
-    @commands.command(aliases=['val_recentmatch'])
-    async def findonematch(self,pCtx):
-        if not await self.checkForMention(pCtx):
-            return
-        discord_id = pCtx.message.mentions[0].id
-        if not await self.checkAuthenticated(pCtx, discord_id):
-            return
-
-        match_history = await self.getPlayerMatchHistory(discord_id)
-        for x in match_history:
-            if x['queueId'] != 'unrated':
-                continue
-            match_index = x
-            break
-        match_data = self.watcher.match.by_id('EU',match_index['matchId'])
-        #player_data = self.findPlayerDataFromMatch(match_data, player_puuid)
 
     def initialiseMaps(self):
         map_names = []
@@ -376,8 +433,9 @@ class Valorant(commands.Cog):
         hashed_id = self.getHash(userID)
         userData = await self.database.find_one({'_uid':hashed_id})
         if userData is None:
-            await self.database.insert_one({'_uid':hashed_id,'_did':userID, '_authenticated':False, '_puuid':''})
-            userData = await self.database.find_one({'_uid':hashed_id})
+            await pCtx.send("The user is currently not authenticated.")
+            await pCtx.send("They need to type 'bruh authenticate'")
+            return False 
 
         if userData['_authenticated'] == False:
             await pCtx.send("The user is currently not authenticated.")
@@ -388,33 +446,54 @@ class Valorant(commands.Cog):
     async def parse_emoji(self, reaction,match_tuple):
         match_lower = 0
         match_higher = match_tuple[1]['teams'][0]['roundsPlayed']
+        round_data = match_tuple[1]['roundResults'][match_tuple[3]-1]
+        number_of_events = self.getEventCountInRound(match_tuple[6],round_data)
         match_list = list(match_tuple)
         if reaction.emoji == '⏺️':
             match_list[2] = not match_list[2]
         elif reaction.emoji == '⬅️':
             match_list[2] = False
+            match_list[6] = 0
             if match_list[3] > match_lower:
                 match_list[3] = match_list[3] - 1
         elif reaction.emoji == '➡️':
             match_list[2] = False
+            match_list[6] = 0
             if match_list[3] < match_higher:
                 match_list[3] = match_list[3] + 1
+        elif reaction.emoji == '◀️':
+            if match_list[6] > 0:
+                match_list[6] = match_list[6] - 1
+        elif reaction.emoji == '▶️':
+            if match_list[6] < number_of_events-1:
+                match_list[6] = match_list[6] + 1
         match_tuple = tuple(match_list)
         await self.editMessage(match_tuple)
         return match_tuple
+
+    def getEventCountInRound(self, round_number, round_data):
+        count = 0
+        if round_data['bombPlanter'] is not None:
+            count = count + 1
+        if round_data['bombDefuser'] is not None:
+            count = count + 1
+        for x in round_data['playerStats']:
+            count = count + len(x['kills'])
+        return count
 
     async def editMessage(self, match_tuple):
         if match_tuple[2]:
             await self.displayOverview(match_tuple[1], match_tuple[5], match_tuple[4])
             return
-        await self.displayRound(match_tuple[1], match_tuple[5], match_tuple[3], match_tuple[4])
+        await self.displayRound(match_tuple[1], match_tuple[5], match_tuple[3], match_tuple[4], match_tuple[6])
     
     @commands.command(name='authenticate')
     async def authenticateRSO(self,pCtx):
         discord_id = pCtx.message.author.id
         hashed_id = self.getHash(discord_id)
+        await self.database.insert_one({'_uid':hashed_id,'_did':discord_id, '_authenticated':False, '_puuid':'', '_access':'','_refresh':'','_gamename':'','_gametag':''})
         hashed_id = hashed_id.replace(' ','%20').replace('\\','%5C').replace("'",'%27')
-        url = f"https://thebestcomputerscientist.co.uk/html/koom-authenticate.html?id={hashed_id}"
+        url = f"https://thebestcomputerscientist.co.uk/html/koom-request.html?id={hashed_id}"
         user = self.bot.get_user(discord_id)
         await user.send(f"Click the following link: {url}\n\nDo not share this link with anyone")
 
