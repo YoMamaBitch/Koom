@@ -15,9 +15,9 @@ class Gacha(commands.Cog):
         with open('league_skins_uri.txt') as f:
             self.skinURIs = f.readline().split(',')
         self.skinTiers = self.loadSkinTiers()
-        self.ORIGINAL_SPAWN_CHANCE = 0.35
-        self.SPAWN_CHANCE = 1.0 # % chance to spawn per attempt
-        self.SPAWN_INCREMENT = 0.06 # % chance increase after each spawn attempt
+        self.ORIGINAL_SPAWN_CHANCE = 0.45
+        self.SPAWN_CHANCE = self.ORIGINAL_SPAWN_CHANCE # % chance to spawn per attempt
+        self.SPAWN_INCREMENT = 0.08 # % chance increase after each spawn attempt
         self.current_spawn = None
         self.current_spawn_msg = None
         self.current_spawn_embed = None
@@ -409,22 +409,22 @@ class Gacha(commands.Cog):
         while True: 
             startTime = time.time()
             endTime = startTime + 100 #Try get a new skin for this amount of time, if can't find one, assume all skins have been collected
-            randNum = self.random.random() * 100
-            #randNum = 0
+            #randNum = self.random.random() * 100
+            randNum = 0
             if randNum <= self.SPAWN_CHANCE:
                 while True:
                     if time.time() > endTime:
                         self.spawn_task.cancel()
                         print("ALL SKINS COLLECTED")
                         break
-                    randSkin = self.convertSkinToUrl(self.getRandomSkin())
-                    if not self.claimed_skins.__contains__(self.convertUrlToSkin(randSkin)):
+                    randSkin = self.getRandomSkin()
+                    if not self.claimed_skins.__contains__(randSkin):
                         break
                 self.SPAWN_CHANCE = self.ORIGINAL_SPAWN_CHANCE
                 await self.writeSpawnMessage(randSkin)
             else:
                 self.SPAWN_CHANCE += self.SPAWN_INCREMENT
-            await asyncio.sleep(self.random.random() * 60 + 60) 
+            await asyncio.sleep(self.random.random() + 1) 
 
     def getTierOfSkin(self, skin):
         for x in range(0,len(self.skinTiers)):
@@ -433,6 +433,7 @@ class Gacha(commands.Cog):
 
     async def writeSpawnMessage(self, skin : str):
         tier = self.getTierOfSkin(skin)
+        skin = self.convertSkinToUrl(skin)
         if tier == 1:
             embed = discord.Embed(title="Tier 1 Skin Spawned!", description="Claim using 'bruh claim \_\_\_\_\_'", color=0xbdbdbd)
         elif tier == 2:
