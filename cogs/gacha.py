@@ -15,9 +15,9 @@ class Gacha(commands.Cog):
         with open('league_skins_uri.txt') as f:
             self.skinURIs = f.readline().split(',')
         self.skinTiers = self.loadSkinTiers()
-        self.ORIGINAL_SPAWN_CHANCE = 0.3
-        self.SPAWN_CHANCE = 1.5 # % chance to spawn per attempt
-        self.SPAWN_INCREMENT = 0.05 # % chance increase after each spawn attempt
+        self.ORIGINAL_SPAWN_CHANCE = 0.35
+        self.SPAWN_CHANCE = 1.0 # % chance to spawn per attempt
+        self.SPAWN_INCREMENT = 0.06 # % chance increase after each spawn attempt
         self.current_spawn = None
         self.current_spawn_msg = None
         self.current_spawn_embed = None
@@ -426,8 +426,27 @@ class Gacha(commands.Cog):
                 self.SPAWN_CHANCE += self.SPAWN_INCREMENT
             await asyncio.sleep(self.random.random() * 60 + 60) 
 
+    def getTierOfSkin(self, skin):
+        for x in range(0,len(self.skinTiers)):
+            if self.skinTiers[x].__contains__(skin):
+                return x+1
+
     async def writeSpawnMessage(self, skin : str):
-        embed = discord.Embed(title="Skin Spawned!", description="Claim using 'bruh claim \_\_\_\_\_'", color=0xebc428)
+        tier = self.getTierOfSkin(skin)
+        if tier == 1:
+            embed = discord.Embed(title="Tier 1 Skin Spawned!", description="Claim using 'bruh claim \_\_\_\_\_'", color=0xbdbdbd)
+        elif tier == 2:
+            embed = discord.Embed(title="Tier 2 Skin Spawned!", description="Claim using 'bruh claim \_\_\_\_\_'", color=0x8ac5d4)
+        elif tier == 3:
+            embed = discord.Embed(title="Tier 3 Skin Spawned!", description="Claim using 'bruh claim \_\_\_\_\_'", color=0x68de7e)
+        elif tier == 4:
+            embed = discord.Embed(title="Tier 4 Skin Spawned!", description="Claim using 'bruh claim \_\_\_\_\_'", color=0xe2e835)
+        elif tier == 5:
+            embed = discord.Embed(title="Tier 5 Skin Spawned!", description="Claim using 'bruh claim \_\_\_\_\_'", color=0xf07d1f)
+        elif tier == 6:
+            embed = discord.Embed(title="Tier 6 Skin Spawned!", description="Claim using 'bruh claim \_\_\_\_\_'", color=0xf00e3b)
+        elif tier == 7:
+            embed = discord.Embed(title="Tier 7 Skin Spawned!", description="Claim using 'bruh claim \_\_\_\_\_'", color=0xff00c3)
         url = f"{secrets.skinBaseURL}{skin}"
         embed.set_image(url=url)
         formatted_skin = self.convertUrlToHidden(skin)
