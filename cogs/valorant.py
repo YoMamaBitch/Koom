@@ -1,6 +1,7 @@
 import json, requests, discord, os, hashlib, asyncio, secrets, urllib.request, datetime
 from discord.ext import commands
 from riotwatcher import ValWatcher
+import urllib.parse
 from PIL import Image
 
 class Valorant(commands.Cog):
@@ -491,8 +492,13 @@ class Valorant(commands.Cog):
     async def authenticateRSO(self,pCtx):
         discord_id = pCtx.message.author.id
         hashed_id = self.getHash(discord_id)
+        my_data = await self.database.find_one({'_uid':hashed_id})
+        if my_data is not None:
+            await pCtx.send("User already authenticated")
+            return
         await self.database.insert_one({'_uid':hashed_id,'_did':discord_id, '_authenticated':False, '_puuid':'', '_access':'','_refresh':'','_gamename':'','_gametag':''})
-        hashed_id = hashed_id.replace(' ','%20').replace('\\','%5C').replace("'",'%27')
+        #hashed_id = hashed_id.replace(' ','%20').replace('\\','%5C').replace("'",'%27').lower()
+        hashed_id = urllib.parse.quote_plus(hashed_id)
         url = f"https://thebestcomputerscientist.co.uk/html/koom-request.html?id={hashed_id}"
         user = self.bot.get_user(discord_id)
         await user.send(f"Click the following link: {url}\n\nDo not share this link with anyone")

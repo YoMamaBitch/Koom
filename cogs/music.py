@@ -118,6 +118,10 @@ class Music(commands.Cog):
             await pCtx.send("You are not in a voice chat!")
             return
         else:
+            if not inputStr[-1].lower() == 'please':
+                await pCtx.send("Maybe I don't feel like it.")
+                return
+            inputStr = inputStr[:-1]
             if self.voice is None:
                 await self._summon(pCtx)
             request = ' '.join(inputStr)
