@@ -15,7 +15,7 @@ class Gacha(commands.Cog):
         with open('league_skins_uri.txt') as f:
             self.skinURIs = f.readline().split(',')
         self.skinTiers = self.loadSkinTiers()
-        self.ORIGINAL_SPAWN_CHANCE = 0.45
+        self.ORIGINAL_SPAWN_CHANCE = 0.4
         self.SPAWN_CHANCE = self.ORIGINAL_SPAWN_CHANCE # % chance to spawn per attempt
         self.SPAWN_INCREMENT = 0.08 # % chance increase after each spawn attempt
         self.current_spawn = None
@@ -409,8 +409,8 @@ class Gacha(commands.Cog):
         while True: 
             startTime = time.time()
             endTime = startTime + 100 #Try get a new skin for this amount of time, if can't find one, assume all skins have been collected
-            #randNum = self.random.random() * 100
-            randNum = 0
+            randNum = self.random.random() * 100
+            #randNum = 0
             if randNum <= self.SPAWN_CHANCE:
                 while True:
                     if time.time() > endTime:
@@ -424,7 +424,7 @@ class Gacha(commands.Cog):
                 await self.writeSpawnMessage(randSkin)
             else:
                 self.SPAWN_CHANCE += self.SPAWN_INCREMENT
-            await asyncio.sleep(self.random.random() + 1) 
+            await asyncio.sleep(self.random.random() * 40 + 30) 
 
     def getTierOfSkin(self, skin):
         for x in range(0,len(self.skinTiers)):
