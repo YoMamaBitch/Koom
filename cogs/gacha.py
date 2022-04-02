@@ -308,7 +308,8 @@ class Gacha(commands.Cog):
         while True: 
             startTime = time.time()
             endTime = startTime + 100 #Try get a new skin for this amount of time, if can't find one, assume all skins have been collected
-            randNum = self.random.random() * 100
+            #randNum = self.random.random() * 100
+            randNum = 0
             if randNum <= self.SPAWN_CHANCE:
                 while True:
                     if time.time() > endTime:
@@ -316,13 +317,14 @@ class Gacha(commands.Cog):
                         print("ALL SKINS COLLECTED")
                         break
                     randSkin = self.convertSkinToUrl(self.getRandomSkin())
+                    print(randSkin)
                     if not self.claimed_skins.__contains__(self.convertUrlToSkin(randSkin)):
                         break
                 self.SPAWN_CHANCE = self.ORIGINAL_SPAWN_CHANCE
                 await self.writeSpawnMessage(randSkin)
             else:
                 self.SPAWN_CHANCE += self.SPAWN_INCREMENT
-            await asyncio.sleep(self.random.random() * 40 + 20) 
+            await asyncio.sleep(self.random.random() + 1) 
 
     async def writeSpawnMessage(self, skin : str):
         embed = discord.Embed(title="Skin Spawned!", description="Claim using 'bruh claim \_\_\_\_\_'", color=0xebc428)
@@ -335,22 +337,27 @@ class Gacha(commands.Cog):
         self.current_spawn_msg = await self.channel.send(embed=embed)
 
     def getRandomSkin(self):
-        ticket = self.random.randint(0,52101)
+        ticket = self.random.randint(0,46101)
         if ticket <20000:
+            print("tier1")
             return self.random.choice(self.skinTiers[0])
         elif ticket < 32000:
+            print("tier2")
             return self.random.choice(self.skinTiers[1])
-        elif ticket < 42000:
+        elif ticket < 40000:
+            print("tier3")
             return self.random.choice(self.skinTiers[2])
-        elif ticket < 48000:
+        elif ticket < 45000:
+            print("tier4")
             return self.random.choice(self.skinTiers[3])
-        elif ticket < 51000:
+        elif ticket < 46000:
+            print("tier5")
             return self.random.choice(self.skinTiers[4])
-        elif ticket < 52000:
+        elif ticket < 46100:
+            print("tier6")
             return self.random.choice(self.skinTiers[5])
-        elif ticket < 52100:
-            return self.random.choice(self.skinTiers[6])
-        return self.random.choice(self.skinTiers[7])
+        print("tier7")
+        return self.random.choice(self.skinTiers[6])
 
     def loadSkinTiers(self):
         with open("gacha_rarities.txt") as f:
