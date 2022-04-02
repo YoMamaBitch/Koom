@@ -1,3 +1,4 @@
+import difflib
 from math import ceil
 from riotwatcher import LolWatcher, ApiError
 from bson.objectid import ObjectId
@@ -5,8 +6,6 @@ import secrets, discord, json, re, time
 import asyncio
 from random import Random
 from discord.ext import commands
-
-#Claim cap
 
 class Gacha(commands.Cog):
     def __init__(self, bot):
@@ -17,7 +16,7 @@ class Gacha(commands.Cog):
             self.skinURIs = f.readline().split(',')
         self.skinTiers = self.loadSkinTiers()
         self.ORIGINAL_SPAWN_CHANCE = 0.3
-        self.SPAWN_CHANCE = self.ORIGINAL_SPAWN_CHANCE # % chance to spawn per attempt
+        self.SPAWN_CHANCE = 1.5 # % chance to spawn per attempt
         self.SPAWN_INCREMENT = 0.05 # % chance increase after each spawn attempt
         self.current_spawn = None
         self.current_spawn_msg = None
@@ -32,7 +31,7 @@ class Gacha(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.channel = self.bot.get_channel(secrets.testGacha)
+        self.channel = self.bot.get_channel(secrets.gachaChannel)
         self.spawn_task = asyncio.get_event_loop().create_task(self.spawnSkins())
 
     @commands.Cog.listener()
@@ -89,6 +88,55 @@ class Gacha(commands.Cog):
                 await self.doTrade(msg)
                 self.activeTrades.remove(msg)
             return   
+
+    @commands.command(aliases=['delwl','wldel','removewl','wishdel'])
+    async def removeFromWishlist(self,pCtx, index : int = 1):
+        did = pCtx.message.author.id
+        await self.checkIfUserInDatabase(did)
+        user = await self.database.find_one({'_did':did})
+        wishlist = user['_wishlist']
+        if len(wishlist) != 1:
+            await pCtx.send("You have nothing on your wishlist.")
+            return
+        if index != 1:
+            await pCtx.send("Invalid index of wishlist skin.")
+            return
+        await self.database.update_one({'_did':did}, {'$pull':{'_wishlist':wishlist[0]}})
+        await pCtx.send(f"Removed {wishlist[0]} from wishlist.")
+
+    @commands.command(aliases=['wladd','addwl','wishadd','addwish'])
+    async def addToWishlist(self,pCtx, *skin:str):
+        did = pCtx.message.author.id
+        await self.checkIfUserInDatabase(did)
+        user = await self.database.find_one({'_did':did})
+        wishlist = user['_wishlist']
+        if len(wishlist) == 1:
+            await pCtx.send("You cannot have more than 1 wishlisted skin. Remove it by 'bruh delwl 1'")
+            return
+        skin = ' '.join(skin)
+        closest_skin = difflib.get_close_matches(skin,self.skinURIs, n=1, cutoff=0.25)
+        if (len(closest_skin) == 0):
+            await pCtx.send("Couldn't find a skin close enough to your search.")
+            return
+        closest_skin = self.convertUrlToSkin(closest_skin[0])
+        await self.database.update_one({'_did':did}, {'$push':{'_wishlist':closest_skin}})
+        await pCtx.send(f"Added {closest_skin} to wishlist.")
+
+    @commands.command(aliases=['wishlist','wl'])
+    async def printWishlist(self, pCtx):
+        did = pCtx.message.author.id
+        await self.checkIfUserInDatabase(did)
+        user = await self.database.find_one({'_did':did})
+        wishlist = user['_wishlist']
+        embed = discord.Embed(title=f"{pCtx.message.author.display_name}'s Wishlist", color=0x6a2a8c)
+        embed.set_thumbnail(url=f"{secrets.skinBaseURL}lol.png")
+        embed.set_image(url = f"{secrets.skinBaseURL}{self.convertSkinToUrl(wishlist[0])}")
+        if len(wishlist) > 0:
+            for x in range(0,len(wishlist)):
+                embed.add_field(name='\u200b', value=f'{wishlist[x]}')
+        else:
+            embed.add_field(name="No wishlisted skin", value="Add one with 'bruh addwl __'")
+        await pCtx.send(embed=embed)
 
     @commands.command(aliases=['fav','favourite'])
     async def setFav(self, pCtx, choice : str):
@@ -361,8 +409,8 @@ class Gacha(commands.Cog):
         while True: 
             startTime = time.time()
             endTime = startTime + 100 #Try get a new skin for this amount of time, if can't find one, assume all skins have been collected
-            #randNum = self.random.random() * 100
-            randNum = 0
+            randNum = self.random.random() * 100
+            #randNum = 0
             if randNum <= self.SPAWN_CHANCE:
                 while True:
                     if time.time() > endTime:
@@ -449,16 +497,18 @@ class Gacha(commands.Cog):
         return claimedObj['claimed']
 
     @commands.command(aliases=['stop_gacha', 'stopgacha', 'gachastop'])
-    async def stopGacha(self, pCtx):
+    async def stopTheGacha(self, pCtx):
         if pCtx.message.author.id != secrets.keironID:
             return
         self.spawn_task.cancel()
+        print(f"Stopped Gacha at {self.SPAWN_CHANCE}%")
 
     @commands.command(aliases=['start_gacha', 'startgacha', 'gachastart'])
-    async def stopGacha(self, pCtx):
+    async def startTheGacha(self, pCtx):
         if pCtx.message.author.id != secrets.keironID:
             return
         self.spawn_task = asyncio.get_event_loop().create_task(self.spawnSkins())
+        print(f"Started Gacha at {self.SPAWN_CHANCE}")
 
     async def addClaimToDB(self):
         await self.database.update_one({'_id':ObjectId(secrets.gachaID)}, {'$push':{'claimed':self.current_spawn}})
