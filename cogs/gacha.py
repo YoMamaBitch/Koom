@@ -6,8 +6,6 @@ import asyncio
 from random import Random
 from discord.ext import commands
 
-#Rarities
-#Inventory Cap
 #Claim cap
 
 class Gacha(commands.Cog):
@@ -18,9 +16,9 @@ class Gacha(commands.Cog):
         with open('league_skins_uri.txt') as f:
             self.skinURIs = f.readline().split(',')
         self.skinTiers = self.loadSkinTiers()
-        self.ORIGINAL_SPAWN_CHANCE = 0.43
+        self.ORIGINAL_SPAWN_CHANCE = 0.3
         self.SPAWN_CHANCE = self.ORIGINAL_SPAWN_CHANCE # % chance to spawn per attempt
-        self.SPAWN_INCREMENT = 0.065 # % chance increase after each spawn attempt
+        self.SPAWN_INCREMENT = 0.05 # % chance increase after each spawn attempt
         self.current_spawn = None
         self.current_spawn_msg = None
         self.current_spawn_embed = None
@@ -92,6 +90,23 @@ class Gacha(commands.Cog):
                 self.activeTrades.remove(msg)
             return   
 
+    @commands.command(aliases=['fav','favourite'])
+    async def setFav(self, pCtx, choice : str):
+        discord_id = pCtx.message.author.id
+        await self.checkIfUserInDatabase(discord_id)
+        try:
+            choice = int(choice)
+        except:
+            await pCtx.send("Invalid index for favourite.")
+            return
+        user = await self.database.find_one({'_did':discord_id})
+        inventory = user['_inventory']
+        if choice <= 0 or choice > len(inventory):
+            await pCtx.send("Invalid index for favourite.")
+            return
+        await self.database.update_one({'_did':discord_id}, {'$set':{'_favourite':inventory[choice-1]}})
+        await pCtx.send(f"Successfully changed favourite to: {inventory[choice-1]}")
+
     async def doTrade(self, msg):
         sender_id = msg[0]
         receiver_id = msg[2]
@@ -103,6 +118,14 @@ class Gacha(commands.Cog):
             sent = '\u200b'
         if received == '':
             received = '\u200b' 
+
+        if not self.checkInventory(sender_id, len(receiver_list) - len(sender_list)):
+            await self.cancelTradeNoInventory()
+            return
+        if not self.checkInventory(receiver_id, len(sender_list) - len(receiver_list)):
+            await self.cancelTradeNoInventory()
+            return
+        
         for x in receiver_list:
             self.database.update_one({'_did':sender_id}, {'$push':{'_inventory':x}})
             self.database.update_one({'_did':receiver_id},{'$pull':{'_inventory':x}})
@@ -115,6 +138,13 @@ class Gacha(commands.Cog):
         embed.add_field(name="\u200b",value="\u200b")
         embed.add_field(name=f"{msg[3]} Sent",value=f"{received}")
         await msg[6].edit(embed=embed)
+
+    async def cancelTradeNoInventory(self, msg, cancelee):
+        embed = discord.Embed(title="Skin Trade Cancelled", color=0xc91e1e)
+        embed.set_thumbnail(url=f"{secrets.skinBaseURL}lol.png")
+        embed.add_field(name=f"Cancelled trade as {cancelee} did not have enough inventory space.")
+        await msg[6].edit(embed=embed)
+        await msg[6].clear_reactions()
 
     async def sendCancelledTradeMsg(self, msg, cancelee):
         embed = discord.Embed(title="Skin Trade Cancelled", color=0xc91e1e)
@@ -214,6 +244,9 @@ class Gacha(commands.Cog):
         if mention is None:
             await pCtx.send("You didn't @ anyone to trade with.")
             return
+        if mention.id == discord_id:
+            await pCtx.send("You can't trade with yourself.")
+            return
         for x in self.activeTradeOffers:
             if x[0] == mention.id or x[1] == mention.id:
                 await pCtx.send("The other person is already in a trade.")
@@ -269,6 +302,7 @@ class Gacha(commands.Cog):
         else:
             embed.add_field(name=f'Page {page+1} of {maxPage}', value=embed_body, inline=False)
         embed.set_thumbnail(url=fav_url)
+        embed.set_footer(text=f"{len(inv)} / 250")
         if msg is None:
             msg = await channel.send(embed=embed)
             if embed_body == '':
@@ -283,8 +317,20 @@ class Gacha(commands.Cog):
     @commands.command('claim')
     async def skinClaim(self, pCtx, *input : str):
         await self.checkIfUserInDatabase(pCtx.message.author.id)
+
+        now = time.time()
+        userdata = await self.database.find_one({'_did':pCtx.message.author.id})
+        lastclaim = float(userdata['_last'])
+        elapsed = now - lastclaim
+        if elapsed < 3600: # 1 hour
+            await pCtx.send(f"You still have {3600 - elapsed}s before you can claim again.")
+            return
+
         input = ' '.join(input)
-        if self.current_spawn == input:
+        if self.current_spawn.lower() == input.lower():
+            if not await self.checkInventory(pCtx.message.author.id):
+                await pCtx.send(f"You don't have enough inventory space, {pCtx.message.author.display_name}")
+                return
             await self.sendSuccessClaimMessage(pCtx)
             await self.updateUserDatabase(pCtx) #User copy
             await self.addClaimToDB() #Database copy
@@ -292,6 +338,13 @@ class Gacha(commands.Cog):
             self.current_spawn = None
         else:
             await self.sendFailedClaimMessage(pCtx)
+
+    async def checkInventory(self, discord_id, gain = 1):
+        user = await self.database.find_one({'_did':discord_id})
+        inv = user['_inventory']
+        if len(inv) + gain > 250:
+            return False
+        return True
 
     async def sendSuccessClaimMessage(self, pCtx):
         await pCtx.message.add_reaction(emoji='😍')
@@ -317,14 +370,13 @@ class Gacha(commands.Cog):
                         print("ALL SKINS COLLECTED")
                         break
                     randSkin = self.convertSkinToUrl(self.getRandomSkin())
-                    print(randSkin)
                     if not self.claimed_skins.__contains__(self.convertUrlToSkin(randSkin)):
                         break
                 self.SPAWN_CHANCE = self.ORIGINAL_SPAWN_CHANCE
                 await self.writeSpawnMessage(randSkin)
             else:
                 self.SPAWN_CHANCE += self.SPAWN_INCREMENT
-            await asyncio.sleep(self.random.random() + 1) 
+            await asyncio.sleep(self.random.random() * 60 + 60) 
 
     async def writeSpawnMessage(self, skin : str):
         embed = discord.Embed(title="Skin Spawned!", description="Claim using 'bruh claim \_\_\_\_\_'", color=0xebc428)
@@ -429,7 +481,7 @@ class Gacha(commands.Cog):
     async def checkIfUserInDatabase(self, discord_id):
         user = await self.database.find_one({'_did':discord_id})
         if user is None:
-            entry = {"_did":discord_id, "_inventory":[], "_wishlist":[], "_favourite":""}
+            entry = {"_did":discord_id, "_inventory":[], "_wishlist":[], "_favourite":"", "_last":0}
             await self.database.insert_one(entry)
 
 
