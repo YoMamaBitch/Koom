@@ -6,6 +6,9 @@ import asyncio
 from random import Random
 from discord.ext import commands
 
+#Rarities
+#Inventory Cap
+#Claim cap
 
 class Gacha(commands.Cog):
     def __init__(self, bot):
@@ -14,9 +17,10 @@ class Gacha(commands.Cog):
         self.watcher = LolWatcher(secrets.riotKey)
         with open('league_skins_uri.txt') as f:
             self.skinURIs = f.readline().split(',')
+        self.skinTiers = self.loadSkinTiers()
         self.ORIGINAL_SPAWN_CHANCE = 0.43
         self.SPAWN_CHANCE = self.ORIGINAL_SPAWN_CHANCE # % chance to spawn per attempt
-        self.SPAWN_INCREMENT = 0.075 # % chance increase after each spawn attempt
+        self.SPAWN_INCREMENT = 0.065 # % chance increase after each spawn attempt
         self.current_spawn = None
         self.current_spawn_msg = None
         self.current_spawn_embed = None
@@ -311,7 +315,7 @@ class Gacha(commands.Cog):
                         self.spawn_task.cancel()
                         print("ALL SKINS COLLECTED")
                         break
-                    randSkin = self.random.choice(self.skinURIs)
+                    randSkin = self.convertSkinToUrl(self.getRandomSkin())
                     if not self.claimed_skins.__contains__(self.convertUrlToSkin(randSkin)):
                         break
                 self.SPAWN_CHANCE = self.ORIGINAL_SPAWN_CHANCE
@@ -329,6 +333,57 @@ class Gacha(commands.Cog):
         self.current_spawn = self.convertUrlToSkin(skin)
         self.current_spawn_embed = embed
         self.current_spawn_msg = await self.channel.send(embed=embed)
+
+    def getRandomSkin(self):
+        ticket = self.random.randint(0,52101)
+        if ticket <20000:
+            return self.random.choice(self.skinTiers[0])
+        elif ticket < 32000:
+            return self.random.choice(self.skinTiers[1])
+        elif ticket < 42000:
+            return self.random.choice(self.skinTiers[2])
+        elif ticket < 48000:
+            return self.random.choice(self.skinTiers[3])
+        elif ticket < 51000:
+            return self.random.choice(self.skinTiers[4])
+        elif ticket < 52000:
+            return self.random.choice(self.skinTiers[5])
+        elif ticket < 52100:
+            return self.random.choice(self.skinTiers[6])
+        return self.random.choice(self.skinTiers[7])
+
+    def loadSkinTiers(self):
+        with open("gacha_rarities.txt") as f:
+            data = f.readline().split(',')
+        tier1 = []
+        tier2 = []
+        tier3 = []
+        tier4 = []
+        tier5 = []
+        tier6 = []
+        tier7 = []
+        for x in data:
+            try:
+                cost = int(x.split('+')[1])
+                skin = x.split('+')[0]
+            except Exception as e:
+                continue
+            if cost >= 260 and cost <= 500:
+                tier1.append(skin)
+            elif cost >=520 and cost <= 585:
+                tier2.append(skin)
+            elif cost >= 750 and cost <= 880:
+                tier3.append(skin)
+            elif cost == 975:
+                tier4.append(skin)
+            elif cost >= 1350 and cost <= 2400:
+                tier5.append(skin)
+            elif cost >= 2775 and cost <= 5000:
+                tier6.append(skin)
+            else:
+                tier7.append(skin)
+            
+        return [tier1,tier2,tier3,tier4,tier5,tier6,tier7]
 
     async def fetchClaimedList(self):
         claimedObj = await self.database.find_one({'_id': ObjectId(secrets.gachaID)})
