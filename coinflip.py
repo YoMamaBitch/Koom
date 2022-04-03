@@ -14,8 +14,8 @@ class Coinflip():
         self.player = message.author.id
         self.otherPlayer = otherPlayer
         self.guess = str.lower(guess)
-        self.headList = ['heads','head','ct']
-        self.tailList = ['tails','tail','t']
+        self.headList = ['heads','head','ct','h']
+        self.tailList = ['tails','tail','t','t']
     
     async def updateBalance(self,amount, UID):
         self.bot.db.koomdata.update_one({'_uid':UID}, {'$inc':{'_currency':amount}})

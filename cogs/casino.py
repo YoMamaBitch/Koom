@@ -54,27 +54,6 @@ class Casino(commands.Cog):
         game = Coinflip(self.bot, pCtx.message, guess, amount, otherPlayer)
         await game.start()
 
-    @commands.command(name='hangman')
-    async def hm(self,pCtx,amount:int):
-        if amount < 0:
-            await pCtx.send("Can't bet a negative amount")
-            return
-        ID = pCtx.message.author.id
-        #for game in self.hmSessions:
-        #    if game.player == ID:
-        #        await pCtx.send("You're already in a hangman game")
-        #        return
-        user = await self.bot.db.koomdata.find_one({'_uid':int(ID)})
-        if user['_currency'] < amount:
-            await pCtx.send("Not enough money to gamble")
-            return
-        try:
-            game = hangman.HangmanGame(self.bot, pCtx.message, amount, self.hmSessions)
-        except Exception as e:
-            print(e)
-        self.hmSessions.append(game)
-        await game.start()
-
     @commands.command(name='blackjack')
     async def bj(self, pCtx, amount:int):
         if amount < 0:
