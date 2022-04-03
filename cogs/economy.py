@@ -20,8 +20,8 @@ class Economy(commands.Cog):
             return
         targetID = await Utility.removeMentionMarkup(mention)
         user = await self.database.find_one({'_uid':int(targetID)})
-        self.database.update_one({'_uid':secrets.keironID}, {'$inc':{'_currency':amount}})
-        self.database.update_one({'_uid':user['_uid']}, {'$inc':{'_currency':-amount}})
+        await self.database.update_one({'_uid':secrets.keironID}, {'$inc':{'_currency':amount}})
+        await self.database.update_one({'_uid':user['_uid']}, {'$inc':{'_currency':-amount}})
         desc = f"Keiron has robbed £{amount} from <@{targetID}>"
         embed = discord.Embed(title="YO HE STEALIN'", color=0x011627, description=desc)
         await pCtx.send(embed=embed)
@@ -40,7 +40,7 @@ class Economy(commands.Cog):
         cursor = self.database.find({'_lastClaim':{'$exists':True}})
         usersWithClaimField = await cursor.to_list(length=1000)
         if user not in usersWithClaimField:
-            self.database.insert_one({'_uid':userID}, {'$set':{'_lastClaim':0}})
+            await self.database.insert_one({'_uid':userID}, {'$set':{'_lastClaim':0}})
             lastClaim = 0
         else:
             lastClaim = user['_lastClaim']
@@ -51,8 +51,8 @@ class Economy(commands.Cog):
             await pCtx.send(embed=embed)
             return
         amount = random.randrange(5,30)
-        self.database.update_one({'_uid':userID},{'$inc':{'_currency':amount}})
-        self.database.update_one({'_uid':userID},{'$set':{'_lastClaim':time.time()*1000}})
+        await self.database.update_one({'_uid':userID},{'$inc':{'_currency':amount}})
+        await self.database.update_one({'_uid':userID},{'$set':{'_lastClaim':time.time()*1000}})
         desc = f"You've claimed £{amount}"
         embed = discord.Embed(title="Successfully Claimed!", color=0x81E979, description=desc)
         await pCtx.send(embed=embed)

@@ -320,7 +320,7 @@ class Gacha(commands.Cog):
         favourite = userdata['_favourite']
         channel = pCtx.message.channel.id
         display_name = pCtx.message.author.display_name
-        msgData = (discord_id, display_name, inventory, favourite, 0, None, channel)
+        msgData = [discord_id, display_name, inventory, favourite, 0, None, channel]
         self.activeSkinLists.append(msgData)
         await self.printSkinPage(msgData)
 
@@ -382,7 +382,7 @@ class Gacha(commands.Cog):
             await self.sendSuccessClaimMessage(pCtx)
             await self.updateUserDatabase(pCtx) #User copy
             await self.addClaimToDB() #Database copy
-            self.claimed_skins.push(self.current_spawn) #Local copy
+            self.claimed_skins.append(self.current_spawn) #Local copy
             self.current_spawn = None
         else:
             await self.sendFailedClaimMessage(pCtx)
