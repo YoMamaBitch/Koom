@@ -31,7 +31,7 @@ class Gacha(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.channel = self.bot.get_channel(secrets.testGacha)
+        self.channel = self.bot.get_channel(secrets.gachaChannel)
         self.spawn_task = asyncio.get_event_loop().create_task(self.spawnSkins())
 
     @commands.Cog.listener()
