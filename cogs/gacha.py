@@ -31,7 +31,7 @@ class Gacha(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.channel = self.bot.get_channel(secrets.gachaChannel)
+        self.channel = self.bot.get_channel(secrets.testGacha)
         self.spawn_task = asyncio.get_event_loop().create_task(self.spawnSkins())
 
     @commands.Cog.listener()
@@ -364,14 +364,19 @@ class Gacha(commands.Cog):
             
     @commands.command('claim')
     async def skinClaim(self, pCtx, *input : str):
+        if self.current_spawn == None:
+            await pCtx.send("There is no currently spawned skin.")
+            return
         await self.checkIfUserInDatabase(pCtx.message.author.id)
 
-        now = time.time()
+        now = int(time.time())
         userdata = await self.database.find_one({'_did':pCtx.message.author.id})
-        lastclaim = float(userdata['_last'])
+        lastclaim = int(userdata['_last'])
         elapsed = now - lastclaim
         if elapsed < 3600: # 1 hour
-            await pCtx.send(f"You still have {3600 - elapsed}s before you can claim again.")
+            s = 3600-elapsed
+            m,s = divmod(s, 60)
+            await pCtx.send("You still have {:02d}:{:02d} before you can claim again.".format(m,s))
             return
 
         input = ' '.join(input)
@@ -380,7 +385,7 @@ class Gacha(commands.Cog):
                 await pCtx.send(f"You don't have enough inventory space, {pCtx.message.author.display_name}")
                 return
             await self.sendSuccessClaimMessage(pCtx)
-            await self.updateUserDatabase(pCtx) #User copy
+            await self.updateUserDatabase(pCtx, now) #User copy
             await self.addClaimToDB() #Database copy
             self.claimed_skins.append(self.current_spawn) #Local copy
             self.current_spawn = None
@@ -424,7 +429,7 @@ class Gacha(commands.Cog):
                 await self.writeSpawnMessage(randSkin)
             else:
                 self.SPAWN_CHANCE += self.SPAWN_INCREMENT
-            await asyncio.sleep(self.random.random() * 40 + 30) 
+            await asyncio.sleep(self.random.random() * 40 + 20) 
 
     def getTierOfSkin(self, skin):
         for x in range(0,len(self.skinTiers)):
@@ -533,9 +538,10 @@ class Gacha(commands.Cog):
     async def addClaimToDB(self):
         await self.database.update_one({'_id':ObjectId(secrets.gachaID)}, {'$push':{'claimed':self.current_spawn}})
 
-    async def updateUserDatabase(self, pCtx):
+    async def updateUserDatabase(self, pCtx, timestamp):
         discord_id = pCtx.message.author.id
         await self.database.update_one({'_did':discord_id},{'$push':{'_inventory':self.current_spawn}})
+        await self.database.update_one({'_did':discord_id},{'$set':{'_last':timestamp}})
 
     def convertSkinToUrl(self, skinName):
         return '_'.join(skinName.split(' ')) + '.jpg'

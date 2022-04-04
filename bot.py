@@ -5,30 +5,24 @@ import motor.motor_asyncio
 import os
 import secrets
 
-intents = discord.Intents.default()
-intents.members = True
-intents.message_content = True
-bot = commands.Bot(command_prefix='bruh ', intents=intents, application_id = 881586576235315220, case_insensitive=True)
+bot = commands.Bot(command_prefix='bruh ', intents=discord.Intents().all(), case_insensitive=True)
 bot.remove_command('help')
 bot.mongo = motor.motor_asyncio.AsyncIOMotorClient(str(secrets.mongoKey))
 bot.db = bot.mongo.userdata
-
 @bot.command()
 async def load(ctx,extension):
-   await ctx.send(f"Loaded {extension}")
-   await bot.load_extension(f'cogs.{extension}')
+    await ctx.send(f"Loaded {extension}")
+    bot.load_extension(f'cogs.{extension}')
 
 @bot.command()
 async def unload(ctx,extension):
-   await ctx.send(f"Unloaded {extension}")
-   await bot.unload_extension(f'cogs.{extension}')
+    await ctx.send(f"Unloaded {extension}")
+    bot.unload_extension(f'cogs.{extension}')
 
-@bot.event
-async def setup_hook():
-    for file in os.listdir('./cogs'):
-        if file.endswith('.py'):
-            bot.load_extension(f'cogs.{file[:-3]}')
-            print('Loaded: %s' %f'cogs.{file[:-3]}')
+for file in os.listdir('./cogs'):
+    if file.endswith('.py'):
+        bot.load_extension(f'cogs.{file[:-3]}')
+        print('Loaded: %s' %f'cogs.{file[:-3]}')
 
 @bot.command()
 async def help(pCtx):
@@ -46,4 +40,5 @@ async def help(pCtx):
 
     await pCtx.send(embed=embed)
 
-bot.run(secrets.discordKey)
+
+bot.run(secrets.discordToken)
