@@ -1,49 +1,24 @@
-from asyncio import sleep
-import discord
+import discord, secrets, os
 from discord.ext import commands
-import motor.motor_asyncio
-import os
-import secrets
 
-intents = discord.Intents.default()
-intents.members = True
-intents.message_content = True
-bot = commands.Bot(command_prefix='bruh ', intents=intents, application_id = 881586576235315220, case_insensitive=True)
-bot.remove_command('help')
-bot.mongo = motor.motor_asyncio.AsyncIOMotorClient(str(secrets.mongoKey))
-bot.db = bot.mongo.userdata
+class KoomBot(commands.Bot):
+    def __init__(self):
+        super().__init__(command_prefix='bruh ', intents=discord.Intents.all(), application_id=881586576235315220, case_insensitive=True)
 
-@bot.command()
-async def load(ctx,extension):
-   await ctx.send(f"Loaded {extension}")
-   await bot.load_extension(f'cogs.{extension}')
+    async def on_ready(self):
+        print(f"{self.user} has connected to Discord.")
 
-@bot.command()
-async def unload(ctx,extension):
-   await ctx.send(f"Unloaded {extension}")
-   await bot.unload_extension(f'cogs.{extension}')
+    async def close(self):
+        await super().close()
 
-@bot.event
-async def setup_hook():
-    for file in os.listdir('./cogs'):
-        if file.endswith('.py'):
-            bot.load_extension(f'cogs.{file[:-3]}')
-            print('Loaded: %s' %f'cogs.{file[:-3]}')
+    async def setup_hook(self):
+        for x in os.listdir('./cogs'):
+            if x.endswith('.py'):
+                await self.load_extension(f'cogs.{x[:-3]}')
+                print(f'Loaded: {x[:-3]}')
 
-@bot.command()
-async def help(pCtx):
-    embed = discord.Embed(title="Need Help with Koom?", color=0xe0e0e0)
-    with open('helpText.txt') as file:
-        for line in file:
-            cmd = line.split('--')[0]
-            if (cmd == '\n'):
-                cmd = '\u200b'
-            try:
-                explanation = line.split('--')[1]
-            except:
-                explanation = '\u200b'
-            embed.add_field(name=cmd,value=explanation,inline=False)
+        await bot.tree.sync(guild = secrets.testGuild)
 
-    await pCtx.send(embed=embed)
 
-bot.run(secrets.discordKey)
+bot = KoomBot()
+bot.run(secrets.discordToken)
