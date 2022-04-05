@@ -19,6 +19,22 @@ class Music(commands.Cog):
         self.seeking = False
         self.timeout = 0
 
+    @commands.command(aliases=['loop','l'])
+    async def loopSong(self,ctx):
+        self.loop = not self.loop
+        if self.loop:
+            await ctx.send("Current song is now looped.")
+            return
+        await ctx.send("Current song is now un-looped.")
+    
+    @commands.command(aliases=['loopqueue','lq'])
+    async def loopTheQueue(self,ctx):
+        self.loopQueue = not self.loopQueue
+        if self.loopQueue:
+            await ctx.send("Current queue is now looped.")
+            return
+        await ctx.send("Current queue is now un-looped.")
+
     @commands.command(aliases=['dc','disconnect','leave'])
     async def dcChannel(self,ctx):
         if ctx.voice_client is None:
@@ -93,6 +109,8 @@ class Music(commands.Cog):
     async def queue_song(self, ctx, *input : str):
         arg = ' '.join(input)
         if len(arg) == 0:
+            #self.decrementPointer()
+            await self.play(ctx,0)
             return
         if self.is_url(arg):
             info = ydl.extract_info(arg, download=False)
@@ -116,37 +134,31 @@ class Music(commands.Cog):
         await self.play(ctx)
 
     async def play(self, ctx, seek = 0):
-        print(f"Play {self.queuePointer}")
         FFMPEG_OPT =  {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
         try:
             url = self.queue[self.queuePointer]['hostURL']
             stream = discord.FFmpegPCMAudio(url, **FFMPEG_OPT)
             totalTime = 0
-            if seek > 0:
+            if isinstance(seek,int) and seek > 0:
                 async with ctx.typing():
                     while totalTime < seek:
                         stream.read()
                         totalTime += 0.02
-            ctx.voice_client.play(stream, after=lambda e: self.post_song(ctx))
+            ctx.voice_client.play(stream, after=lambda e: asyncio.run_coroutine_threadsafe(self.post_song(ctx), self.bot.loop))
         except Exception as e:
             print(e)            
 
-    def post_song(self, ctx):
+    async def post_song(self, ctx):
         if self.seeking:
             return
         if self.loop:
-           self.play(self,ctx)
+           await self.play(ctx)
            return
         self.incrementPointer()
         if not self.reachedEnd:
-            self.play(ctx)
+            await self.play(ctx)
             return
-        coro = self.sendEndOfQueue(ctx)
-        fut = asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
-        try:
-            fut.result()
-        except:
-            print("Error running coro in post_song") 
+        await self.sendEndOfQueue(ctx)
 
     def incrementPointer(self):
         if self.loopQueue:
@@ -159,6 +171,13 @@ class Music(commands.Cog):
             return
         self.reachedEnd = False
         self.queuePointer = self.queuePointer + 1
+
+    def decrementPointer(self):
+        if (self.loop or self.loopQueue) and self.queuePointer == 0:
+            self.queuePointer = len(self.queue)-1
+            return
+        self.queuePointer = self.queuePointer - 1
+        self.reachedEnd = False
 
     def is_url(self, argument:str):
         return argument.startswith("http")
