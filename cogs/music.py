@@ -1,6 +1,3 @@
-from calendar import formatstring
-from math import trunc
-import queue
 import discord,secrets, asyncio, youtube_dl, utility, time
 from discord.ext import commands
 from discord.ui import Button, View
@@ -234,22 +231,16 @@ class Music(commands.Cog):
         await ctx.send(content=data['webpage_url'],embed=embed)
 
     async def sendQueueList(self,ctx):
-        embed = discord.Embed(title="Queue List", color=0xc98847)
-        embed.set_footer(text=f"Requested by {ctx.author.display_name}")
-        songNames = ''
-        songDurations = ''
-        for x in range(self.queueStart, self.queueEnd):
-            if len(self.queue) == x:
-                break
-            truncated = self.queue[x]['title']
-            if len(truncated) > 19:
-                truncated = truncated[0:18] + '...'
-            songNames += f'{x}. ' + truncated + '\n'
-            songDurations += self.queue[x]['duration'] + '\n'
-        embed.add_field(name="Name", value=songNames)
-        embed.add_field(name='\u200b', value='\u200b')
-        embed.add_field(name="Length", value=songDurations)
-        await ctx.send(embed=embed)
+        view = View(timeout=120.0)
+        leftBtn = utility.QueueButton(pStyle=discord.ButtonStyle.grey, pEmoji='⬅️',musicCog=self, author=ctx.author)
+        rightBtn = utility.QueueButton(pStyle=discord.ButtonStyle.grey, pEmoji='➡️', musicCog=self, author=ctx.author)
+        leftBtn.disabled = True
+        if len(self.queue) <= 10:
+            rightBtn.disabled = True
+        view.add_item(leftBtn).add_item(rightBtn)
+        embed = utility.generateQueueEmbed(self, ctx.author)
+        await ctx.send(embed=embed, view=view)
+
     ###############################
 
 async def setup(bot: commands.Bot) -> None:
