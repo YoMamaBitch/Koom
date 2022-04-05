@@ -9,16 +9,32 @@ ydl = youtube_dl.YoutubeDL(ydl_opts)
 class Music(commands.Cog):
     def __init__(self,bot:commands.Bot)->None:
         self.bot = bot
+        self.initialiseVariables()
+
+    def initialiseVariables(self):
         self.queuePointer = 0
         self.queue = []
         self.voiceChannel = None
         self.reachedEnd = False
         self.loop = False
         self.loopQueue = False
-        self.seeking = False
+        self.ignorePostSongEvent = False
         self.timeout = 0
         self.queueStart = 0
         self.queueEnd = 10
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self,member,before,after):
+        if self.bot.application_id == member.id and after.channel == None:
+            self.cleanup()
+
+    def cleanup(self):
+        self.ignorePostSongEvent = True
+        self.initialiseVariables()
+
+    @commands.command()
+    async def summon(self,ctx):
+        return
 
     @commands.command(aliases=['q','queue'])
     async def sendQueue(self,ctx):
@@ -46,6 +62,7 @@ class Music(commands.Cog):
             await ctx.send("Koom not in a channel")
             return
         await ctx.voice_client.disconnect()
+        self.initialiseVariables()
         await ctx.send("Disconnected from channel")
 
     @commands.command()
@@ -59,7 +76,7 @@ class Music(commands.Cog):
 
     @commands.command()
     async def seek(self, ctx, timestamp : str):
-        self.seeking = True
+        self.ignorePostSongEvent = True
         if ctx.voice_client.is_playing():
             ctx.voice_client.stop()
         if timestamp.__contains__(':'):
@@ -93,7 +110,7 @@ class Music(commands.Cog):
             return
         await self.play(ctx, seconds)
         await ctx.send(f"Skipped to {formatString}")
-        self.seeking = False
+        self.ignorePostSongEvent = False
          
     @commands.command()
     async def shuffle(self, ctx):
@@ -134,7 +151,6 @@ class Music(commands.Cog):
             await self.sendSuccessQueue(ctx, data)
         await self.tryPlay(ctx)
 
-
     async def tryPlay(self,ctx):
         if ctx.voice_client.is_playing():
             return
@@ -157,7 +173,7 @@ class Music(commands.Cog):
             print(e)            
 
     async def post_song(self, ctx):
-        if self.seeking:
+        if self.ignorePostSongEvent:
             return
         if self.loop:
            await self.play(ctx)
@@ -194,6 +210,7 @@ class Music(commands.Cog):
 
     @seek.before_invoke
     @queue_song.before_invoke
+    @summon.before_invoke
     async def ensure_voice_connect(self, ctx):
         if ctx.voice_client is None:
             if ctx.author.voice:

@@ -9,8 +9,8 @@ def secondsToMinSecString(secs) -> str:
 def generateQueueEmbed(music,author):
     embed = discord.Embed(title="Queue List", color=0xc98847)
     embed.set_footer(text=f"Requested by {author.display_name}")
-    songNames = ''
-    songDurations = ''
+    songNames = '\u200b'
+    songDurations = '\u200b'
     for x in range(music.queueStart, music.queueEnd):
         if len(music.queue) == x:
             break
