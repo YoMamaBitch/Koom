@@ -1,4 +1,5 @@
-import discord,secrets, asyncio, youtube_dl, utility
+import queue
+import discord,secrets, asyncio, youtube_dl, utility, time
 from discord.ext import commands
 from random import seed, randint
 
@@ -15,6 +16,35 @@ class Music(commands.Cog):
         self.loop = False
         self.loopQueue = False
         self.timeout = 0
+
+    @commands.command()
+    async def seek(self, ctx, timestamp : str):
+        try:
+            seconds = int(timestamp)
+        except:
+            parsed = timestamp.split(':')
+            s = parsed.pop()
+            m = parsed.pop()
+            h = parsed.pop()
+            seconds = s + m * 60 + h * 3600
+        self.play(ctx, seconds)
+        await ctx.send(f"Skipped to {seconds}s")
+         
+
+    @commands.command()
+    async def shuffle(self, ctx):
+        seed(time.time())
+        queueLength = len(self.queue)
+        iterationCount = randint(queueLength * 2, queueLength * 5)
+        for _ in range(0,iterationCount):
+            i1 = randint(1,queueLength-1)
+            i2 = randint(1,queueLength-1)
+            if i1 == i2:
+                continue
+            temp = self.queue[i1]
+            self.queue[i1] = self.queue[i2]
+            self.queue[i2] = temp
+        await ctx.send("Shuffled playlist.")
 
     @commands.command(aliases=['play','p'])
     async def queue_song(self, ctx, *input : str):
@@ -35,17 +65,16 @@ class Music(commands.Cog):
         await self.send_success_queue(ctx, data)
         self.tryPlay(ctx)
 
-
     def tryPlay(self,ctx):
         if ctx.voice_client.is_playing():
             return
         self.play(ctx)
 
     def play(self, ctx, seek = 0):
-        FFMPEG_OPT =  {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': f'-vn -ss {seek}'}
+        FFMPEG_OPT =  {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': f'-vn'}
         try:
             url = self.queue[self.queuePointer]['hostURL']
-            ctx.voice_client.play(discord.FFmpegPCMAudio(url), **FFMPEG_OPT, after=lambda e: self.post_song(ctx))
+            ctx.voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPT), after=lambda e: self.post_song(ctx))
         except Exception as e:
             print(e)            
 
@@ -72,6 +101,7 @@ class Music(commands.Cog):
     def is_url(self, argument:str):
         return argument.startswith("http")
 
+    @seek.before_invoke
     @queue_song.before_invoke
     async def ensure_voice_connect(self, ctx):
         if ctx.voice_client is None:
@@ -80,7 +110,10 @@ class Music(commands.Cog):
             else:
                 await ctx.send("You are not connected to a voice channel.")
                 raise commands.CommandError("Author not connected to a voice channel.")
-        elif ctx.voice_client.is_playing():
+    
+    @seek.before_invoke
+    async def stop_playing_audio(self,ctx):
+        if ctx.voice_client.is_playing():
             ctx.voice_client.stop()
     
     ######## OUTPUT EMBEDS ########
