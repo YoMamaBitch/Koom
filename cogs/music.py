@@ -1,7 +1,9 @@
 from calendar import formatstring
+from math import trunc
 import queue
 import discord,secrets, asyncio, youtube_dl, utility, time
 from discord.ext import commands
+from discord.ui import Button, View
 from random import seed, randint
 
 ydl_opts = {'format':'bestaudio/best','postprocessors': [{'key':'FFmpegExtractAudio','preferredcodec':'mp3','preferredquality':'192'}], 'yes-playlists':True}
@@ -18,7 +20,13 @@ class Music(commands.Cog):
         self.loopQueue = False
         self.seeking = False
         self.timeout = 0
+        self.queueStart = 0
+        self.queueEnd = 10
 
+    @commands.command(aliases=['q','queue'])
+    async def sendQueue(self,ctx):
+        await self.sendQueueList(ctx)
+        
     @commands.command(aliases=['loop','l'])
     async def loopSong(self,ctx):
         self.loop = not self.loop
@@ -125,8 +133,10 @@ class Music(commands.Cog):
             'thumbnail': info['thumbnails'][3]['url'],
             'author' : ctx.message.author.display_name }
         self.queue.append(data)
-        await self.send_success_queue(ctx, data)
+        if ctx.voice_client is not None and ctx.voice_client.is_playing():
+            await self.sendSuccessQueue(ctx, data)
         await self.tryPlay(ctx)
+
 
     async def tryPlay(self,ctx):
         if ctx.voice_client.is_playing():
@@ -145,6 +155,7 @@ class Music(commands.Cog):
                         stream.read()
                         totalTime += 0.02
             ctx.voice_client.play(stream, after=lambda e: asyncio.run_coroutine_threadsafe(self.post_song(ctx), self.bot.loop))
+            await self.sendPlayingMessage(ctx)
         except Exception as e:
             print(e)            
 
@@ -201,20 +212,44 @@ class Music(commands.Cog):
     async def sendEndOfQueue(self,ctx):
         await ctx.send("End of queue.")
 
-    async def send_success_queue(self,ctx,data):
+    async def sendSuccessQueue(self,ctx,data):
         embed = discord.Embed(title="Queued Song", color=0x37a7db)
-        embed.add_field(name="Song Name", value=data['title'], inline=False)
+        truncated = data['title']
+        if len(truncated) > 27:
+            truncated = truncated[0:26] + '...'
+        embed.add_field(name="Song Name", value=truncated, inline=False)
         embed.add_field(name="Duration", value=data['duration'], inline=False)
         embed.set_footer(text=f"Requested by {data['author']}")
         await ctx.send(content=data['webpage_url'],embed=embed)
 
-    async def send_playing_message(self,ctx):
+    async def sendPlayingMessage(self,ctx):
         data = self.queue[self.queuePointer]
         embed = discord.Embed(title="Now Playing", color=0x26d437)
-        embed.add_field(name="Song Name", value=data['title'], inline=False)
+        truncated = data['title']
+        if len(truncated) > 27:
+            truncated = truncated[0:26] + '...'
+        embed.add_field(name="Song Name", value=truncated, inline=False)
         embed.add_field(name="Duration", value=data['duration'], inline=False)
         embed.set_footer(text=f"Requested by {data['author']}")
         await ctx.send(content=data['webpage_url'],embed=embed)
+
+    async def sendQueueList(self,ctx):
+        embed = discord.Embed(title="Queue List", color=0xc98847)
+        embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+        songNames = ''
+        songDurations = ''
+        for x in range(self.queueStart, self.queueEnd):
+            if len(self.queue) == x:
+                break
+            truncated = self.queue[x]['title']
+            if len(truncated) > 19:
+                truncated = truncated[0:18] + '...'
+            songNames += f'{x}. ' + truncated + '\n'
+            songDurations += self.queue[x]['duration'] + '\n'
+        embed.add_field(name="Name", value=songNames)
+        embed.add_field(name='\u200b', value='\u200b')
+        embed.add_field(name="Length", value=songDurations)
+        await ctx.send(embed=embed)
     ###############################
 
 async def setup(bot: commands.Bot) -> None:
