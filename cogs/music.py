@@ -17,6 +17,23 @@ class Music(commands.Cog):
         self.loopQueue = False
         self.timeout = 0
 
+    @commands.command(aliases=['dc','disconnect','leave'])
+    async def dcChannel(self,ctx):
+        if ctx.voice_client is None:
+            await ctx.send("Koom not in a channel")
+            return
+        await ctx.voice_client.disconnect()
+        await ctx.send("Disconnected from channel")
+
+    @commands.command()
+    async def skip(self, ctx):
+        if ctx.voice_client is None:
+            return
+        if self.reachedEnd:
+            await self.sendEndOfQueue(ctx)           
+            return
+        ctx.voice_client.stop()
+
     @commands.command()
     async def seek(self, ctx, timestamp : str):
         try:
@@ -30,7 +47,6 @@ class Music(commands.Cog):
         self.play(ctx, seconds)
         await ctx.send(f"Skipped to {seconds}s")
          
-
     @commands.command()
     async def shuffle(self, ctx):
         seed(time.time())
@@ -71,6 +87,7 @@ class Music(commands.Cog):
         self.play(ctx)
 
     def play(self, ctx, seek = 0):
+        print(f"Play {self.queuePointer}")
         FFMPEG_OPT =  {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': f'-vn'}
         try:
             url = self.queue[self.queuePointer]['hostURL']
@@ -80,19 +97,26 @@ class Music(commands.Cog):
 
     def post_song(self, ctx):
         if self.loop:
-            self.play(self,ctx)
-            return
+           self.play(self,ctx)
+           return
         self.incrementPointer()
         if not self.reachedEnd:
-            self.play(self,ctx)
+            self.play(ctx)
+            return
+        coro = self.sendEndOfQueue(ctx)
+        fut = asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
+        try:
+            fut.result()
+        except:
+            print("Error running coro in post_song") 
 
     def incrementPointer(self):
         if self.loopQueue:
-            if self.queuePointer >= len(self.queue):
+            if self.queuePointer >= len(self.queue)-1:
                 self.queuePointer = 0
                 self.reachedEnd = False
                 return
-        if self.queuePointer >= len(self.queue):
+        if self.queuePointer >= len(self.queue)-1:
             self.reachedEnd = True
             return
         self.reachedEnd = False
@@ -100,6 +124,8 @@ class Music(commands.Cog):
 
     def is_url(self, argument:str):
         return argument.startswith("http")
+
+    ####### COROUTINES ############
 
     @seek.before_invoke
     @queue_song.before_invoke
@@ -111,12 +137,17 @@ class Music(commands.Cog):
                 await ctx.send("You are not connected to a voice channel.")
                 raise commands.CommandError("Author not connected to a voice channel.")
     
+    #@skip.before_invoke
     @seek.before_invoke
     async def stop_playing_audio(self,ctx):
         if ctx.voice_client.is_playing():
             ctx.voice_client.stop()
-    
-    ######## OUTPUT EMBEDS ########
+    ###############################
+     
+    ######## OUTPUT ########
+    async def sendEndOfQueue(self,ctx):
+        await ctx.send("End of queue.")
+
     async def send_success_queue(self,ctx,data):
         embed = discord.Embed(title="Queued Song", color=0x37a7db)
         embed.add_field(name="Song Name", value=data['title'], inline=False)
