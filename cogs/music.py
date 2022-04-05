@@ -1,3 +1,4 @@
+from calendar import formatstring
 import queue
 import discord,secrets, asyncio, youtube_dl, utility, time
 from discord.ext import commands
@@ -15,6 +16,7 @@ class Music(commands.Cog):
         self.reachedEnd = False
         self.loop = False
         self.loopQueue = False
+        self.seeking = False
         self.timeout = 0
 
     @commands.command(aliases=['dc','disconnect','leave'])
@@ -36,16 +38,41 @@ class Music(commands.Cog):
 
     @commands.command()
     async def seek(self, ctx, timestamp : str):
-        try:
-            seconds = int(timestamp)
-        except:
+        self.seeking = True
+        if ctx.voice_client.is_playing():
+            ctx.voice_client.stop()
+        if timestamp.__contains__(':'):
             parsed = timestamp.split(':')
-            s = parsed.pop()
-            m = parsed.pop()
-            h = parsed.pop()
-            seconds = s + m * 60 + h * 3600
-        self.play(ctx, seconds)
-        await ctx.send(f"Skipped to {seconds}s")
+            if all(isinstance(x,int) for x in parsed):
+                await ctx.send("Invalid seek")
+                return
+            if len(parsed) == 2:                
+                s = int(parsed.pop())
+                m = int(parsed.pop())
+                formatString = "{:01d}:{:02d}".format(m,s)
+                seconds = s + m * 60
+            elif len(parsed) == 3:
+                s = int(parsed.pop())
+                m = int(parsed.pop())
+                h = int(parsed.pop())
+                formatString = "{:01d}:{:02d}:{:02d}".format(h,m,s)
+                seconds = s + m * 60 + h * 3600
+            else:
+                return
+        elif str.isdigit(timestamp):
+            seconds = int(timestamp)
+            m,s = divmod(seconds, 60)
+            formatString = "{:02d}:{:02d}".format(m,s)
+        else:
+            return
+        duration = self.queue[self.queuePointer]['duration'].split(':')
+        durationSeconds = int(duration[0]) * 60 + int(duration[1])
+        if seconds > durationSeconds:
+            await ctx.send("Seek beyond the song duration")
+            return
+        await self.play(ctx, seconds)
+        await ctx.send(f"Skipped to {formatString}")
+        self.seeking = False
          
     @commands.command()
     async def shuffle(self, ctx):
@@ -65,6 +92,8 @@ class Music(commands.Cog):
     @commands.command(aliases=['play','p'])
     async def queue_song(self, ctx, *input : str):
         arg = ' '.join(input)
+        if len(arg) == 0:
+            return
         if self.is_url(arg):
             info = ydl.extract_info(arg, download=False)
         else:
@@ -79,23 +108,32 @@ class Music(commands.Cog):
             'author' : ctx.message.author.display_name }
         self.queue.append(data)
         await self.send_success_queue(ctx, data)
-        self.tryPlay(ctx)
+        await self.tryPlay(ctx)
 
-    def tryPlay(self,ctx):
+    async def tryPlay(self,ctx):
         if ctx.voice_client.is_playing():
             return
-        self.play(ctx)
+        await self.play(ctx)
 
-    def play(self, ctx, seek = 0):
+    async def play(self, ctx, seek = 0):
         print(f"Play {self.queuePointer}")
-        FFMPEG_OPT =  {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': f'-vn'}
+        FFMPEG_OPT =  {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
         try:
             url = self.queue[self.queuePointer]['hostURL']
-            ctx.voice_client.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPT), after=lambda e: self.post_song(ctx))
+            stream = discord.FFmpegPCMAudio(url, **FFMPEG_OPT)
+            totalTime = 0
+            if seek > 0:
+                async with ctx.typing():
+                    while totalTime < seek:
+                        stream.read()
+                        totalTime += 0.02
+            ctx.voice_client.play(stream, after=lambda e: self.post_song(ctx))
         except Exception as e:
             print(e)            
 
     def post_song(self, ctx):
+        if self.seeking:
+            return
         if self.loop:
            self.play(self,ctx)
            return
@@ -133,15 +171,11 @@ class Music(commands.Cog):
         if ctx.voice_client is None:
             if ctx.author.voice:
                 await ctx.author.voice.channel.connect()
+                await ctx.guild.change_voice_state(channel=ctx.author.voice.channel, self_deaf=True)
             else:
                 await ctx.send("You are not connected to a voice channel.")
                 raise commands.CommandError("Author not connected to a voice channel.")
-    
-    #@skip.before_invoke
-    @seek.before_invoke
-    async def stop_playing_audio(self,ctx):
-        if ctx.voice_client.is_playing():
-            ctx.voice_client.stop()
+
     ###############################
      
     ######## OUTPUT ########
