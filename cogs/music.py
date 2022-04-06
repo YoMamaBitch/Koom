@@ -10,6 +10,7 @@ class Music(commands.Cog):
     def __init__(self,bot:commands.Bot)->None:
         self.bot = bot
         self.initialiseVariables()
+        self.economy = bot.get_cog("Economy")
 
     def initialiseVariables(self):
         self.queuePointer = 0

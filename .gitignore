@@ -1,3 +1,5 @@
 KoomKey.pem
 KoomKey.ppk
 secrets.py
+database.sqlite
+database.sqlite-journal
