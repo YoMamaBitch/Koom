@@ -32,8 +32,8 @@ class KoomBot(commands.Bot):
             if x.endswith('.py'):
                 await self.load_extension(f'cogs.{x[:-3]}')
                 print(f'Loaded: {x[:-3]}')
-        await bot.tree.sync(guild = secrets.testGuild)
-
+        #synced = await bot.tree.sync(guild=discord.Object(600696326287785984))
+        #print(synced)
 
 bot = KoomBot()
 bot.run(secrets.discordToken)

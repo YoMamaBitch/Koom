@@ -1,3 +1,4 @@
+from re import L
 import discord, secrets, time,random, utility, sqlite3
 from discord import app_commands
 from discord.ext import commands
@@ -7,14 +8,29 @@ class Economy(commands.Cog):
     def __init__(self,bot:commands.Bot)->None:
         self.bot = bot
         self.database = sqlite3.connect("database.sqlite")
-        self.cursor = self.database.cursor()
-        #self.cursor.execute('SELECT * FROM Economy')
-        #result = self.cursor.fetchone()
+        self.cursor : sqlite3.Cursor = self.database.cursor()
         self.balStartIndex = 0
         self.balEndIndex = 10
         self.topBalances = []
 
+    @app_commands.command(name='test',description='MYTEST')
+    @app_commands.guilds(discord.Object(600696326287785984))
+    async def test(self,interaction : discord.Interaction)->None:
+        await interaction.response.send_message(content="HELLO")
+
+    @app_commands.command(name='bal', description='Print your balance')
+    @app_commands.guilds(discord.Object(600696326287785984))
+    async def bal(self, interaction:discord.Interaction)->None:
+        id = interaction.user.id
+        display_name = interaction.user.display_name
+        balance = await self.ensureUserInDatabase(id)
+        balance = balance[1]
+        embed = utility.generateBalanceEmbed(display_name,balance)
+        await interaction.response.send_message(embed=embed)
+
+
     @app_commands.command(name="baltop", description="Print up to the top 100 balances")
+    @app_commands.guilds(discord.Object(600696326287785984))
     async def baltop(self, interaction:discord.Interaction)->None:
         view = View(timeout=120.0)
         self.topBalances = self.cursor.execute('SELECT * FROM Economy ORDER BY bank DESC').fetchall()
@@ -29,9 +45,10 @@ class Economy(commands.Cog):
         
     @app_commands.checks.cooldown(1, 86400)
     @app_commands.command(name="daily",description="Get your daily reward!")
+    @app_commands.guilds(discord.Object(600696326287785984))
     async def daily(self, interaction:discord.Interaction)->None:
         discord_id = interaction.user.id
-        await self.ensureUserInDatabase(interaction.user.id)
+        entry = await self.ensureUserInDatabase(interaction.user.id)
         author_display = interaction.user.display_name
         author_icon = interaction.user.display_avatar.url
         claimStatus = await self.dailyAlreadyClaimed(discord_id)
@@ -45,20 +62,27 @@ class Economy(commands.Cog):
         await self.sendMoneyToId(discord_id, amount)
         embed = utility.generateSuccessEmbed(f"You have received £{amount}", author_display,author_icon)
         await interaction.response.send_message(embed=embed)
+        self.database.commit()
 
     @app_commands.command(name="pay",description="Pay someone")
+    @app_commands.guilds(discord.Object(600696326287785984))
     async def pay(self,interaction:discord.Interaction,user:discord.User,amount:float)->None:
-        hasMoney = await self.checkBalanceForAmount(interaction.user.id, amount)
         author_display = interaction.user.display_name
         author_icon = interaction.user.display_avatar.url
+        if amount < 0:
+            embed = utility.generateFailedEmbed("Can't send negative money.", author_display, author_icon)
+            await interaction.response.send_message(embed=embed)
+            return
+        hasMoney = await self.checkBalanceForAmount(interaction.user.id, amount)
         if not hasMoney:
             embed = utility.generateFailedEmbed(f"You don't have enough money to do this.", author_display, author_icon)
             await interaction.response.send_message(embed=embed)
             return
         await self.takeMoneyFromId(interaction.user.id, amount)
         await self.sendMoneyToId(user.id, amount)
-        embed = utility.generateSuccessEmbed(f"You have paid £{amount} to {user.display_name}", author_display, author_icon)
+        embed = utility.generateSuccessEmbed("You have paid **£{:.2f}** to **{}**".format(amount, user.display_name), author_display, author_icon)
         await interaction.response.send_message(embed=embed)
+        self.database.commit()
 
     async def dbSendMoneyTo(self, user : discord.User, amount : float):
         self.cursor.execute(f'SELECT * FROM Economy WHERE did IS {user.id}')
@@ -82,12 +106,14 @@ class Economy(commands.Cog):
             return entry
         self.cursor.execute(f'''INSERT INTO Economy (did,bank,lastdaily,coinflips,blackjacks,profit_blackjack,profit_coinflip) 
         VALUES({id}, 100, 0, 0, 0, 0, 0)''')
+        self.database.commit()
         return [id,100,0,0,0,0,0]
     
     async def getUserEconomy(self, id):
         return self.cursor.execute(f'SELECT * FROM Economy WHERE did IS {id}').fetchone()
 
     async def sendMoneyToId(self,id,amount):
+        await self.ensureUserInDatabase(id)
         user_data = self.cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
         newValue = user_data[1] + amount
         return self.cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did IS {id}''')
@@ -108,4 +134,4 @@ class Economy(commands.Cog):
     #### ### ## ### # ## ##
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Economy(bot), guild=secrets.testGuild)
+    await bot.add_cog(Economy(bot))

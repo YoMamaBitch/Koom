@@ -35,7 +35,8 @@ class Music(commands.Cog):
 
     @commands.command()
     async def summon(self,ctx):
-        return
+        await ctx.author.voice.channel.connect()
+        await ctx.guild.change_voice_state(channel=ctx.author.voice.channel, self_deaf=True)
 
     @commands.command(aliases=['q','queue'])
     async def sendQueue(self,ctx):
@@ -59,17 +60,14 @@ class Music(commands.Cog):
 
     @commands.command(aliases=['dc','disconnect','leave'])
     async def dcChannel(self,ctx):
-        if ctx.voice_client is None:
-            await ctx.send("Koom not in a channel")
-            return
+        if ctx.voice_client.channel != ctx.author.voice.channel:
+            await ctx.send("You are not in the same voice channel as Koom.")
+            raise commands.CommandError("Author not connected to same voice channel as Koom.")
         await ctx.voice_client.disconnect()
         self.initialiseVariables()
-        await ctx.send("Disconnected from channel")
 
     @commands.command()
     async def skip(self, ctx):
-        if ctx.voice_client is None:
-            return
         if self.reachedEnd:
             await self.sendEndOfQueue(ctx)           
             return
@@ -210,8 +208,37 @@ class Music(commands.Cog):
     ####### COROUTINES ############
 
     @seek.before_invoke
-    @queue_song.before_invoke
+    @skip.before_invoke
+    async def ensure_song_playing(self,ctx):
+        if ctx.voice_client is None:
+            await ctx.send("Song is not playing.")
+            raise commands.CommandError("Song is not currently playing - No Voice Client.")
+        if ctx.voice_client.channel != ctx.author.voice.channel:
+            await ctx.send("You are not in the same voice channel as Koom.")
+            raise commands.CommandError("Author not connected to same voice channel as Koom.")        
+        if ctx.voice_client.is_playing():
+            return
+        await ctx.send("Song is not playing.")
+        raise commands.CommandError("Song is not currently playing.")
+
     @summon.before_invoke
+    async def ensure_not_connected(self,ctx):
+        if ctx.voice_client is None:
+            return
+        await ctx.send("Koom is already connected to a channel")
+        raise commands.CommandError("Koom is already connected to a chat.")
+
+    @loopTheQueue.before_invoke
+    @loopSong.before_invoke
+    @shuffle.before_invoke
+    async def ensure_author_same_vc(self,ctx):
+        if ctx.voice_client is None:
+            await self.ensure_voice_connect(ctx)
+        if ctx.author.voice.channel is None or ctx.voice_client.channel != ctx.author.voice.channel:
+            await ctx.send("You are not in the same voice channel as Koom.")
+            raise commands.CommandError("Author not connected to same voice channel as Koom.")
+
+    @queue_song.before_invoke
     async def ensure_voice_connect(self, ctx):
         if ctx.voice_client is None:
             if ctx.author.voice:
@@ -220,6 +247,7 @@ class Music(commands.Cog):
             else:
                 await ctx.send("You are not connected to a voice channel.")
                 raise commands.CommandError("Author not connected to a voice channel.")
+        return
 
     ###############################
      
@@ -262,4 +290,4 @@ class Music(commands.Cog):
     ###############################
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(Music(bot), guild=secrets.testGuild)
+    await bot.add_cog(Music(bot))

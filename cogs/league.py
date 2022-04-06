@@ -6,4 +6,4 @@ class League(commands.Cog):
         self.bot = bot
 
 async def setup(bot: commands.Bot) -> None:
-    await bot.add_cog(League(bot), guild=secrets.testGuild)
+    await bot.add_cog(League(bot))
