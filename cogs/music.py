@@ -181,7 +181,8 @@ class Music(commands.Cog):
         if not self.reachedEnd:
             await self.play(ctx)
             return
-        await self.sendEndOfQueue(ctx)
+        if ctx.voice_client is not None:
+            await self.sendEndOfQueue(ctx)
 
     def incrementPointer(self):
         if self.loopQueue:
