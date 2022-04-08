@@ -35,15 +35,18 @@ class League(commands.Cog):
                 self.positiveEmotes.append(line)
 
     @app_commands.command(name='leaguematches',description="List your recent League games.")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    @app_commands.guilds(discord.Object(600696326287785984))
     async def leaguematches(self, interaction:discord.Interaction)->None:
+        if self.checkUserAlreadyAskedForMatch(interaction.user.id):
+            await interaction.response.send_message("You have an active match board still.")
+            return
         await interaction.response.defer()
         id = interaction.user.id
         author = interaction.user.display_name
         url = interaction.user.display_avatar.url
         if not self.checkIfUserLinked(id):
-            embed= utility.generateLeagueFailedEmbed(text="Your discord account isn't linked to a league account, link with /linkleague", author=author, author_icon=url)
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+            embed= utility.generateLeagueFailedEmbed("Your discord account isn't linked to a league account, link with /linkleague", author, url)
+            await interaction.followup.send(embed=embed, ephemeral=True)
             return
         userdata = self.cursor.execute("SELECT * FROM League WHERE did is ?",(id,)).fetchone()
         league_name:str = userdata[1]
@@ -51,20 +54,26 @@ class League(commands.Cog):
         league_id = userdata[3]
         regionNoNumber = league_name.split('#')[1].removesuffix('1').removesuffix('2')
         match_region = self.getMatchRegionFromUserRegion(regionNoNumber)
-        player_matches_ids = self.watcher.match.matchlist_by_puuid(match_region, league_puuid, count=10)
+        player_matches_ids = self.watcher.match.matchlist_by_puuid(match_region, league_puuid, count=50)
         player_matches = []
         for i in player_matches_ids:
             player_matches.append(self.watcher.match.by_id(match_region, i))
-        match_embed_data = [id,0,8]
-        embed = self.generateMatchesEmbed(player_matches, league_puuid,league_id, author, url,match_embed_data)
-        view = LeagueMatchView(match_embed_data, self)
-        match_embed_data.append(view)
-        self.activeMatchHistories.append(match_embed_data)
+        embed_data = [id,0,9]
+        embed_data.append(None)
+        embed_data.append(player_matches)
+        embed_data.append(league_id)
+        embed_data.append(author)
+        embed_data.append(url)
+        embed = self.generateMatchesEmbed(embed_data)
+        view = LeagueMatchView(embed_data, self)
+        embed_data.insert(3,view)
+        embed_data.remove(None)
+        self.activeMatchHistories.append(embed_data)
         await interaction.followup.send(embed=embed, view=view)
         #await interaction.response.send_message(embed=embed,view=view)
 
     @app_commands.command(name='leaguefriends',description="List your friends and their current games.")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    @app_commands.guilds(discord.Object(600696326287785984))
     async def leaguefriends(self, interaction:discord.Interaction)->None:
         id = interaction.user.id
         author = interaction.user.display_name
@@ -73,7 +82,11 @@ class League(commands.Cog):
             embed= utility.generateLeagueFailedEmbed(text="Your discord account isn't linked to a league account, link with /linkleague", author=author, author_icon=url)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
-        friends_list = self.cursor.execute(f'SELECT friends FROM League WHERE did is {id}').fetchone()[0].split('`')
+        friends_list = self.cursor.execute(f'SELECT friends FROM League WHERE did is {id}').fetchone()[0]
+        if len(friends_list) == 0:
+            await interaction.response.send_message("You have no friends added, add some with /addleague", ephemeral=True)
+            return
+        friends_list = friends_list.split('`')
         embed = self.generateFriendsEmbed(id,friends_list,author,url)
         await interaction.response.send_message(embed=embed)
 
@@ -96,7 +109,7 @@ class League(commands.Cog):
         await ctx.send(f"Successfully removed {friends_summoner} from your friend list.")
 
     @app_commands.command(name='delleague',description="Remove user from your league friends.")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    @app_commands.guilds(discord.Object(600696326287785984))
     async def delleagueApp(self, interaction:discord.Interaction, friend:discord.User)->None:
         id = interaction.user.id
         author = interaction.user.display_name
@@ -110,18 +123,18 @@ class League(commands.Cog):
             embed = utility.generateLeagueFailedEmbed(text="Your friend has not linked their league account, link with /linkleague", author=author, author_icon=url)
             await interaction.response.send_message(embed=embed)
             return
-        friends:str = self.cursor.execute('SELECT friends From League WHERE did IS ?', (id)).fetchone()
+        friends:str = self.cursor.execute('SELECT friends From League WHERE did IS ?', (id,)).fetchone()[0]
         friend_list = friends.split('`')
-        friends_summoner = self.cursor.execute('SELECT linked_league From League WHERE did IS ?',(friend_id)).fetchone()
+        friends_summoner = self.cursor.execute('SELECT linked_league From League WHERE did IS ?',(friend_id,)).fetchone()
         friend_list.remove(friends_summoner)
-        friends = '`'.join(friend_list)
-        self.cursor.execute('UPDATE League SET friends = ? WHERE did IS ?',(friends, id))
+        friends = '`'.join(friend_list).removeprefix('`')
+        self.cursor.execute('UPDATE League SET friends = ? WHERE did IS ?',(friends, id,))
         self.database.commit()
-        embed = utility.generateLeagueSuccessEmbed(f"Successfully removed {friends_summoner} from your friend list.", author, url)
+        embed = utility.generateLeagueSuccessEmbed(f"Successfully removed {friends_summoner} from your friend list.", author, url)[0]
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='addleague', description="Add a user to your league friends.")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    @app_commands.guilds(discord.Object(600696326287785984))
     async def addleague(self, interaction:discord.Interaction, friend:discord.User)->None:
         id = interaction.user.id
         author = interaction.user.display_name
@@ -135,18 +148,18 @@ class League(commands.Cog):
             embed = utility.generateLeagueFailedEmbed(text="Your friend has not linked their league account, link with /linkleague", author=author, author_icon=url)
             await interaction.response.send_message(embed=embed)
             return
-        friends:str = self.cursor.execute('SELECT friends From League WHERE did IS ?', (id)).fetchone()
+        friends = self.cursor.execute('SELECT friends From League WHERE did IS ?', (id,)).fetchone()[0]
         friend_list = friends.split('`')
-        friends_summoner = self.cursor.execute('SELECT linked_league From League WHERE did IS ?',(friend_id)).fetchone()
+        friends_summoner = self.cursor.execute('SELECT linked_league From League WHERE did IS ?',(friend_id,)).fetchone()[0]
         friend_list.append(friends_summoner)
-        friends = '`'.join(friend_list)
-        self.cursor.execute('UPDATE League SET friends = ? WHERE did IS ?',(friends, id))
+        friends = '`'.join(friend_list).removeprefix('`')
+        self.cursor.execute('UPDATE League SET friends = ? WHERE did IS ?',(friends, id,))
         self.database.commit()
         embed = utility.generateLeagueSuccessEmbed(f"Successfully added {friends_summoner} to your friend list.", author, url)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='unlinkleague', description="Unlink your associated league account.")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    @app_commands.guilds(discord.Object(600696326287785984))
     async def unlinkleague(self, interaction:discord.Interaction):
         id = interaction.user.id
         display_name = interaction.user.display_name
@@ -155,13 +168,13 @@ class League(commands.Cog):
             embed= utility.generateLeagueFailedEmbed("Your discord account isn't linked to a league account, link with /linkleague", display_name, display_icon)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
-        self.cursor.execute('UPDATE League SET linked_league = ? WHERE did IS ?',("",id))
+        self.cursor.execute('UPDATE League SET linked_league = ? WHERE did IS ?',(None,id))
         self.database.commit()
         embed = utility.generateLeagueSuccessEmbed("Successfully unlinked.", display_name, display_icon)
         await interaction.response.send_message(embed=embed)
         
     @app_commands.command(name='linkleague', description='Link a league account to your discord.')
-    @app_commands.guilds(discord.Object(817238795966611466))
+    @app_commands.guilds(discord.Object(600696326287785984))
     async def linkleague(self, interaction:discord.Interaction, summonername : str, region : str)->None:
         id = interaction.user.id
         if self.checkIfUserLinked(id):
@@ -197,18 +210,174 @@ class League(commands.Cog):
         ]
     ##### LEAGUE UTILITY #######
 
-    async def matchViewCallback(self, view, index, emoji):
+    def removeMatchList(self, view):
         for x in self.activeMatchHistories:
             if x[3] == view:
-                currentView = view
-                break
-        
+                self.activeMatchHistories.remove(x)
+                return
 
-    def generateMatchesEmbed(self, matches, puuid, lid, author, url, match_embed_data):
-        league_name:str = self.cursor.execute(f"SELECT linked_league FROM League WHERE did IS {match_embed_data[0]}").fetchone()[0]
+    def checkUserAlreadyAskedForMatch(self, id):
+        for x in self.activeMatchHistories:
+            if x[0] == id:
+                return True
+        return False
+
+    async def matchViewCallback(self, view, interaction : discord.Interaction,index, emoji):
+        for x in self.activeMatchHistories:
+            if x[3] == view:
+                embed_data = x
+                break
+        if embed_data == None:
+            raise AssertionError("View was not found in the active match history")
+        if emoji == '↪️':
+            emoji = None
+        if index == -1:
+            if emoji.name == '⬅️':
+                if embed_data[1] == 0:
+                    return 
+                embed_data[1] -= 9
+                embed_data[2] -= 9
+            elif emoji.name == '➡️':
+                if embed_data[2] >= len(embed_data[4]):
+                    return
+                embed_data[1] += 9
+                embed_data[2] += 9
+            embed = self.generateMatchesEmbed(embed_data)
+            embed_data[3].enableNav()
+            await interaction.response.edit_message(embed=embed,view=embed_data[3])
+        elif emoji == None:
+            embed = self.generateDetailedMatch(embed_data, (embed_data[1] + index-1))
+            embed_data[3].disableNav()
+            await interaction.response.edit_message(embed=embed,view=embed_data[3])
+
+    def generateDetailedMatch(self, embed_data, index):
+        league_name = self.cursor.execute(f"SELECT linked_league FROM League WHERE did IS {embed_data[0]}").fetchone()[0]
+        league_name = league_name.split('#')[0]
+        game_info = embed_data[4][index]['info']
+        player_data = self.getPlayerDataFromMatch(game_info,embed_data[5])
+        champName = self.getChampNameFromPlayerData(player_data)
+        win = self.getMatchResultFromPlayerData(player_data)
+        if win:
+            colour = 0x32cf54
+        else:
+            colour = 0xcf3242
+        gm = self.getGameModeFromMatch(game_info).capitalize()
+        durataion = utility.secondsToMinSecString(game_info['gameDuration'])
+        embed = discord.Embed(title=f"{gm} - {durataion}", color=colour)
+        embed.set_author(name=f'{league_name} as {champName}')
+        embed.set_thumbnail(url=f'{self.champUrl}{champName}.png')
+        role = self.getMatchRoleFromPlayerData(player_data)
+        roleEmoji = self.getRoleEmoji(role)
+        kda = self.getKillsDeathsAssistsFromPlayerData(player_data)
+        if kda[1] == 0:
+            kda[1] = 1
+        kda = '{:.2}'.format((kda[0] + kda[2]) / kda[1])
+        gold = self.getGoldFromPlayerData(player_data)
+        dmgDoneChampions = self.getDamageToChampsFromPlayerData(player_data)
+        mitigated = self.getMitigatedFromPlayerData(player_data)
+        healed = self.getHealedFromPlayerData(player_data)
+        dynamic_stat = self.getHighestKill(player_data)
+        turretDmg = None
+        if dynamic_stat is None:
+            turretDmg = True
+            dynamic_stat = self.getTurretDamage(player_data)
+        cc = self.getCCScoreFromPlayerData(player_data)
+        vision = self.getVisionScore(player_data)
+        ff = self.getFF(player_data)
+        primaryRune = self.getPrimaryRune(player_data)
+        secondaryTree = self.getSecondaryRuneTree(player_data)
+        embed.add_field(name=f'Role{roleEmoji}', value=f'{role}')
+        embed.add_field(name='KDA ⚰️', value=f'{kda}')
+        embed.add_field(name='Gold',value=f'<:gold:962089056651608155> {gold}')
+        embed.add_field(name='Champ Dmg', value=f'{dmgDoneChampions}<:3655soypoint:962099404024737793>')
+        embed.add_field(name='Dmg Tanked <:SCIron:929123285470437376>', value=f'{mitigated}')
+        embed.add_field(name='Dmg Healed <:blobpats:596576796594667521>', value=f'{healed}')
+        if turretDmg is not None:
+            embed.add_field(name='Tower Dmg <:blobban:759935431847968788>', value=f'{dynamic_stat}')
+        else:
+            embed.add_field(name=f'{dynamic_stat[0]}<a:froggydefault:744347632754884639>',value=f'{dynamic_stat[1]}') 
+        embed.add_field(name='CC <:stickbug:744346789863358505>',value=f'{cc}')
+        embed.add_field(name='Vision 👀',value=f'{vision}')
+        embed.add_field(name='<:hmm:784328449439039518> FF?', value=f'{ff}')
+        embed.add_field(name='1° Rune',value=f'{primaryRune}')
+        embed.add_field(name='2° Tree',value=f'{secondaryTree}')
+        return embed
+
+    def getRoleEmoji(self,role):
+        if role == 'Top':
+            return '<:Top:962099404339306596>'
+        elif role == 'Support':
+            return '<:Support:962099404242841620>'
+        elif role == 'Jungle':
+            return '<:Jungle:962099404104409119>'
+        elif role == 'Bottom':
+            return '<:Bottom:962099404578365480>'
+        elif role == 'Middle':
+            return '<:Middle:962099404297351238>'
+        return '<:what:812713040881385492>'
+
+    def getSecondaryRuneTree(self,player_data):
+        perkSecondaryStyle = player_data['perks']['styles'][1]['style']
+        if perkSecondaryStyle == 8100:
+            return "Domination"
+        elif perkSecondaryStyle == 8300:
+            return "Inspiration"
+        elif perkSecondaryStyle == 8000:
+            return "Precision"
+        elif perkSecondaryStyle == 8400:
+            return "Resolve"
+        elif perkSecondaryStyle == 8200:
+            return "Sorcery"
+        return '<:press_F:911697562518585344>'
+
+    def getPrimaryRune(self,player_data):
+        playersRune = player_data['perks']['styles'][0]['selections'][0]['perk']
+        for tree in self.runesList:
+            for slot in tree['slots']:
+                for runes in slot['runes']:
+                    if runes['id'] == playersRune:
+                        return runes['key']
+        return '<:press_F:911697562518585344>'
+
+    def getFF(self, player_data):
+        return player_data['gameEndedInSurrender']
+
+    def getVisionScore(self,player_data):
+        return player_data['visionScore']
+
+    def getCCScoreFromPlayerData(self,player_data):
+        return player_data['timeCCingOthers']
+
+    def getTurretDamage(self, player_data):
+        return player_data['damageDealtToTurrets']
+
+    def getHighestKill(self,player_data):
+        if player_data['pentaKills'] > 0:
+            return ['Pentas',player_data['pentaKills']]
+        elif player_data['quadraKills'] > 0:
+            return ['Quadras', player_data['quadraKills']]
+        elif player_data['tripleKills'] > 0:
+            return ['Triples',player_data['tripleKills']]
+        return None
+
+    def getHealedFromPlayerData(self,player_data):
+        return player_data['totalHeal']
+
+    def getMitigatedFromPlayerData(self, player_data):
+        return player_data['damageSelfMitigated']
+
+    def getDamageToChampsFromPlayerData(self, player_data):
+        return player_data['totalDamageDealtToChampions']
+
+    def getGoldFromPlayerData(self, player_data):
+        return player_data['goldEarned']
+
+    def generateMatchesEmbed(self, embed_data):
+        ## MATCH DATA : 0=DID, 1=START, 2=END, 3=VIEW, 4=MATCHES, 5=LEAGUEID, 6=DISPLAYNAME, 7=DISPLAYAVATARURL
+        league_name:str = self.cursor.execute(f"SELECT linked_league FROM League WHERE did IS {embed_data[0]}").fetchone()[0]
         league_name = league_name.split('#')[0]
         embed = discord.Embed(title=f"{league_name}'s Matches", color=0x3d36cf, description="These overview stats surmise the last 50 games.")
-        embed.set_author(name=f"{author}", icon_url=f'{url}')
+        embed.set_author(name=f"{embed_data[6]}", icon_url=f'{embed_data[7]}')
         wins = 0
         losses = 0
         most_played_champ = {}
@@ -216,8 +385,8 @@ class League(commands.Cog):
         kills = 0
         deaths = 0
         assists = 0
-        for x in matches:
-            player_data = self.getPlayerDataFromMatch(x['info'], lid)
+        for x in embed_data[4]:
+            player_data = self.getPlayerDataFromMatch(x['info'], embed_data[5])
             if self.getMatchResultFromPlayerData(player_data):
                 wins += 1
             else:
@@ -247,18 +416,49 @@ class League(commands.Cog):
         embed.add_field(name='Kills <:among_us_dead:784255946326671372>',value=f"""```ini\n[ {kills} ]\n```""")
         embed.add_field(name='Deaths <:what:812713040881385492>',value=f"""```ini\n[ {deaths} ]\n```""")
         embed.add_field(name='Assists <:greetings:366157822481924106>',value=f"""```ini\n[ {assists} ]\n```""")
-        embed.add_field(name='Wins <:StonksCypher:932829442299031582>',value=f"""```yaml\n[ {wins} ]\n```""")
-        winrate = (float(wins)/50.0)*100.0
-        if winrate > 50.0:
-            embed.add_field(name='W/R <:dab:499726833890230273>',value=f"```asciidoc\n= {(float(wins)/50.0)*100.0}% =\n```")
+        embed.add_field(name='Wins <:3487jhinstonks4:962099404100223057>',value=f"""```yaml\n[ {wins} ]\n```""")
+        winr = (float(wins)/len(embed_data[4]))*100.0
+        good_winrate = winr > 50.0
+        winrate = "{:.1f}".format(winr)
+        if good_winrate:
+            embed.add_field(name='W/R <:dab:499726833890230273>',value=f"```asciidoc\n= {winrate}% =\n```")
         else:
-            embed.add_field(name=f'W/R <:youtried:596576824872402974>',value=f"```asciidoc\n= >{(float(wins)/50.0)*100.0}%< =\n```")
+            embed.add_field(name=f'W/R <:youtried:596576824872402974>',value=f"```asciidoc\n= >{winrate}%< =\n```")
 
         embed.add_field(name='<:PepePoint:759934591590203423> Losses',value=f"""```asciidoc\n[ {losses} ]\n```""")
         embed.add_field(name='<:whenyahomiesaysomewildshit:596577153135673344> Top Role', value=f"""```md\n< {top_role} >\n```""")
         embed.add_field(name='\u200b',value="\u200b")
         embed.add_field(name='Top Champ <:POGGERS:467444095053201410>', value=f"""```md\n< {top_champ} >\n```""")
+        self.addMatchInfoToEmbed(embed_data[5], embed, embed_data[4][embed_data[1]:embed_data[2]])
         return embed
+
+    def addMatchInfoToEmbed(self,lid,embed : discord.Embed, matches):
+        for x in matches:
+            matchInfo = x['info']
+            gameLength = matchInfo['gameDuration']
+            gameLength = utility.secondsToMinSecString(int(gameLength))
+            player_data = self.getPlayerDataFromMatch(matchInfo, lid)
+            champName = self.getChampNameFromPlayerData(player_data)
+            gameMode = self.getGameModeFromMatch(matchInfo)
+            if gameMode == 'ARAM':
+                gmEmote = '<:aram:962065966257283093>'
+            elif gameMode == 'SR':
+                gmEmote = '<:sr:962065976214577203>'
+            else:
+                gmEmote = '<:featured:962065989208531014>'
+            if self.getMatchResultFromPlayerData(player_data):
+                winEmote = '<:GreatlyIncreased:932827416722829455>'
+            else:
+                winEmote = '<:GreatlyDecreased:932827435202928710>'
+            embed.add_field(name=f"{winEmote} {champName} {gmEmote}", value=f"{gameLength}")
+
+    def getGameModeFromMatch(self, matchInfo):
+        gm = matchInfo['gameMode']
+        if gm == 'ARAM':
+            return 'ARAM'
+        elif gm == 'CLASSIC':
+            return 'SR'
+        return 'FEATURED'
 
     def getChampNameFromPlayerData(self, player_data):
         return player_data['championName']
@@ -272,7 +472,9 @@ class League(commands.Cog):
     def getMatchRoleFromPlayerData(self, player_data):
         if player_data['teamPosition'] == '' or player_data['teamPosition'] == ' ':
             return "Invalid"
-        return player_data['teamPosition']
+        if player_data['teamPosition'] == 'UTILITY':
+            return 'Support'
+        return player_data['teamPosition'].capitalize()
 
     def getMatchResultFromPlayerData(self, player_data):
         return player_data['win']
