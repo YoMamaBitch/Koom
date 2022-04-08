@@ -94,7 +94,6 @@ def generateQueueEmbed(music,author):
     embed.add_field(name="Length", value=songDurations)
     return embed
 
-
 class BalTopButton(Button):
     def __init__(self, style=discord.ButtonStyle.grey, emoji=None, ecoCog = None, author = None):
         super().__init__(style=style, emoji=emoji)

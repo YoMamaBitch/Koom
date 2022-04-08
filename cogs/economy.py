@@ -3,6 +3,8 @@ from discord import app_commands
 from discord.ext import commands
 from discord.ui import Button, View
 
+#MONEY FOR MODAL TO PLAY VIDEO IN CHANNEL USER AT IN X TIME? 
+
 class Economy(commands.Cog):
     def __init__(self,bot:commands.Bot)->None:
         self.bot = bot

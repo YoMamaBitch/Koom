@@ -1,4 +1,6 @@
+from random import randrange
 import discord,secrets, math, json, asyncio, sqlite3, utility, time
+from league_view import LeagueMatchView
 from typing import List
 from utility import league_content_url
 from riotwatcher import LolWatcher, ApiError
@@ -12,7 +14,6 @@ class League(commands.Cog):
         self.bot = bot
         self.database = sqlite3.connect("database.sqlite")
         self.cursor : sqlite3.Cursor = self.database.cursor()
-        self.activeQueries = []
         self.watcher : LolWatcher = LolWatcher(secrets.leagueKey)
         versions = self.watcher.data_dragon.versions_for_region('euw')
         self.baseRankUrl = "https://thebestcomputerscientist.co.uk/leagueranks/Emblem_"
@@ -22,10 +23,21 @@ class League(commands.Cog):
         self.runesList = self.watcher.data_dragon.runes_reforged(versions['n']['profileicon'])
         self.iconUrl = f"https://ddragon.leagueoflegends.com/cdn/{versions['n']['profileicon']}/img/profileicon/"
         self.champUrl = f"https://ddragon.leagueoflegends.com/cdn/{versions['n']['profileicon']}/img/champion/"
+        self.emoteUrl = f"https://raw.communitydragon.org/12.6/"
+        self.activeMatchHistories = []
+        self.positiveEmotes = []
+        self.negativeEmotes = []
+        with open ('leagueNegativeEmotes.txt', 'r', encoding='utf-8') as f:
+            for line in f:
+                self.negativeEmotes.append(line)
+        with open('leaguePositiveEmotes.txt', 'r',encoding='utf-8') as f:
+            for line in f:
+                self.positiveEmotes.append(line)
 
     @app_commands.command(name='leaguematches',description="List your recent League games.")
     @app_commands.guilds(discord.Object(817238795966611466))
-    async def leaguefriends(self, interaction:discord.Interaction)->None:
+    async def leaguematches(self, interaction:discord.Interaction)->None:
+        await interaction.response.defer()
         id = interaction.user.id
         author = interaction.user.display_name
         url = interaction.user.display_avatar.url
@@ -34,17 +46,22 @@ class League(commands.Cog):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         userdata = self.cursor.execute("SELECT * FROM League WHERE did is ?",(id,)).fetchone()
-        league_name = userdata[1]
+        league_name:str = userdata[1]
         league_puuid = userdata[2]
-        match_region = self.getMatchRegionFromUserRegion(league_name.split('#')[1])
-        player_matches_ids = self.watcher.match.matchlist_by_puuid(match_region, league_puuid, count=50)
+        league_id = userdata[3]
+        regionNoNumber = league_name.split('#')[1].removesuffix('1').removesuffix('2')
+        match_region = self.getMatchRegionFromUserRegion(regionNoNumber)
+        player_matches_ids = self.watcher.match.matchlist_by_puuid(match_region, league_puuid, count=10)
         player_matches = []
         for i in player_matches_ids:
-            player_matches.append(self.watcher.match.by_id(match_region, player_matches_ids[i]))
-        
-        
-        
-
+            player_matches.append(self.watcher.match.by_id(match_region, i))
+        match_embed_data = [id,0,8]
+        embed = self.generateMatchesEmbed(player_matches, league_puuid,league_id, author, url,match_embed_data)
+        view = LeagueMatchView(match_embed_data, self)
+        match_embed_data.append(view)
+        self.activeMatchHistories.append(match_embed_data)
+        await interaction.followup.send(embed=embed, view=view)
+        #await interaction.response.send_message(embed=embed,view=view)
 
     @app_commands.command(name='leaguefriends',description="List your friends and their current games.")
     @app_commands.guilds(discord.Object(817238795966611466))
@@ -179,6 +196,86 @@ class League(commands.Cog):
             for region in regions if current.lower() in region.lower()
         ]
     ##### LEAGUE UTILITY #######
+
+    async def matchViewCallback(self, view, index, emoji):
+        for x in self.activeMatchHistories:
+            if x[3] == view:
+                currentView = view
+                break
+        
+
+    def generateMatchesEmbed(self, matches, puuid, lid, author, url, match_embed_data):
+        league_name:str = self.cursor.execute(f"SELECT linked_league FROM League WHERE did IS {match_embed_data[0]}").fetchone()[0]
+        league_name = league_name.split('#')[0]
+        embed = discord.Embed(title=f"{league_name}'s Matches", color=0x3d36cf, description="These overview stats surmise the last 50 games.")
+        embed.set_author(name=f"{author}", icon_url=f'{url}')
+        wins = 0
+        losses = 0
+        most_played_champ = {}
+        most_played_role = {}
+        kills = 0
+        deaths = 0
+        assists = 0
+        for x in matches:
+            player_data = self.getPlayerDataFromMatch(x['info'], lid)
+            if self.getMatchResultFromPlayerData(player_data):
+                wins += 1
+            else:
+                losses += 1
+            role = self.getMatchRoleFromPlayerData(player_data)
+            if role not in most_played_role:
+                most_played_role[role] = 1
+            else:
+                most_played_role[role] += 1
+            kda = self.getKillsDeathsAssistsFromPlayerData(player_data)
+            kills += kda[0]
+            deaths += kda[1]
+            assists += kda[2]
+            champName = self.getChampNameFromPlayerData(player_data)
+            if champName not in most_played_champ:
+                most_played_champ[champName] = 1
+            else:
+                most_played_champ[champName] += 1
+        if wins >= losses:
+            emoteurl = self.positiveEmotes[randrange(0,len(self.positiveEmotes))].removesuffix('\n')
+        else:
+            emoteurl = self.negativeEmotes[randrange(0,len(self.negativeEmotes))].removesuffix('\n')
+        embed.set_thumbnail(url=self.emoteUrl+emoteurl)
+        most_played_role.pop("Invalid", "")
+        top_role = max(most_played_role, key=most_played_role.get)
+        top_champ = max(most_played_champ, key=most_played_champ.get)
+        embed.add_field(name='Kills <:among_us_dead:784255946326671372>',value=f"""```ini\n[ {kills} ]\n```""")
+        embed.add_field(name='Deaths <:what:812713040881385492>',value=f"""```ini\n[ {deaths} ]\n```""")
+        embed.add_field(name='Assists <:greetings:366157822481924106>',value=f"""```ini\n[ {assists} ]\n```""")
+        embed.add_field(name='Wins <:StonksCypher:932829442299031582>',value=f"""```yaml\n[ {wins} ]\n```""")
+        winrate = (float(wins)/50.0)*100.0
+        if winrate > 50.0:
+            embed.add_field(name='W/R <:dab:499726833890230273>',value=f"```asciidoc\n= {(float(wins)/50.0)*100.0}% =\n```")
+        else:
+            embed.add_field(name=f'W/R <:youtried:596576824872402974>',value=f"```asciidoc\n= >{(float(wins)/50.0)*100.0}%< =\n```")
+
+        embed.add_field(name='<:PepePoint:759934591590203423> Losses',value=f"""```asciidoc\n[ {losses} ]\n```""")
+        embed.add_field(name='<:whenyahomiesaysomewildshit:596577153135673344> Top Role', value=f"""```md\n< {top_role} >\n```""")
+        embed.add_field(name='\u200b',value="\u200b")
+        embed.add_field(name='Top Champ <:POGGERS:467444095053201410>', value=f"""```md\n< {top_champ} >\n```""")
+        return embed
+
+    def getChampNameFromPlayerData(self, player_data):
+        return player_data['championName']
+
+    def getKillsDeathsAssistsFromPlayerData(self, player_data):
+        kills = player_data['kills']
+        deaths = player_data['deaths']
+        assists = player_data['assists']
+        return [kills,deaths,assists]
+
+    def getMatchRoleFromPlayerData(self, player_data):
+        if player_data['teamPosition'] == '' or player_data['teamPosition'] == ' ':
+            return "Invalid"
+        return player_data['teamPosition']
+
+    def getMatchResultFromPlayerData(self, player_data):
+        return player_data['win']
 
     def generateFriendsEmbed(self, id, list:List[str], author,url):
         league_name:str = self.cursor.execute(f"SELECT linked_league FROM League WHERE did IS {id}").fetchone()[0]
