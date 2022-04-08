@@ -2,6 +2,8 @@ import discord
 from discord.ext import commands
 from discord.ui import Button
 
+league_content_url = 'https://thebestcomputerscientist.co.uk/league_content/'
+
 def secondsToMinSecString(secs) -> str:
     m,s = divmod(secs,60)
     return "{:02d}:{:02d}".format(m,s)
@@ -11,6 +13,25 @@ def secondsToHHMMSS(secs)->str:
     m,s = divmod(s,60)
     h,m = divmod(m, 60)
     return "{:.2f}:{:.2f}:{:.2f}".format(h,m,s)
+
+def isValidLeagueRegion(region : str):
+    noPrefix = region.removeprefix('#').upper()
+    regions = ['EUW','BR','EUN','JP','NA','OC','TR','KR']
+    if regions.__contains__(noPrefix):
+        return True
+    return False
+
+def generateLeagueSuccessEmbed(text, author,author_icon):
+    embed = discord.Embed(title="Success <:league:784319004616949790>", color=0x2770cf)
+    embed.set_author(name=author, icon_url=author_icon)
+    embed.add_field(name='\u200b',value=text)
+    return embed
+
+def generateLeagueFailedEmbed(text, author, author_icon):
+    embed = discord.Embed(title="Failed <:what:812713040881385492> ", color=0xeb4034)
+    embed.set_author(name=author, icon_url=author_icon)
+    embed.add_field(name='\u200b',value=text)
+    return embed
 
 def generateSuccessEmbed(text, author, author_icon):
     embed = discord.Embed(title="✅ Success", color=0x34eb5b)
