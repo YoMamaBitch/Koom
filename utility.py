@@ -43,6 +43,19 @@ def isValidLeagueRegion(region : str):
         return True
     return False
 
+def generateValorantSuccessEmbed(text, author,author_icon):
+    embed = discord.Embed(title="Success <:GoldDoge:932831358483574794>", color=0x2770cf)
+    embed.set_author(name=author, icon_url=author_icon)
+    embed.add_field(name='\u200b',value=text)
+    return embed
+
+def generateValorantFailedEmbed(text,author,author_icon):
+    embed = discord.Embed(title="Failed <:phoenixdab:784327000243961858>", color=0xeb4034)
+    embed.set_author(name=author, icon_url=author_icon)
+    embed.add_field(name='\u200b',value=text)
+    return embed
+
+
 def generateLeagueSuccessEmbed(text, author,author_icon):
     embed = discord.Embed(title="Success <:league:784319004616949790>", color=0x2770cf)
     embed.set_author(name=author, icon_url=author_icon)

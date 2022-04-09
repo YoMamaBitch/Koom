@@ -41,7 +41,7 @@ class League(commands.Cog):
                 self.positiveEmotes.append(line)
 
     @app_commands.command(name='claimleague',description="Claim one of your recent 10 league games.")
-    @app_commands.guilds(discord.Object(600696326287785984))
+    @app_commands.guilds(discord.Object(817238795966611466))
     async def claimleague(self, interaction:discord.Interaction, index:int)->None:
         id = interaction.user.id
         author = interaction.user.display_name
@@ -123,7 +123,7 @@ class League(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='leaguematches',description="List your recent League games.")
-    @app_commands.guilds(discord.Object(600696326287785984))
+    @app_commands.guilds(discord.Object(817238795966611466))
     async def leaguematches(self, interaction:discord.Interaction)->None:
         if self.checkUserAlreadyAskedForMatch(interaction.user.id):
             await interaction.response.send_message("You have an active match board still.")
@@ -161,7 +161,7 @@ class League(commands.Cog):
         await interaction.response.send_message(embed=embed,view=view)#
 
     @app_commands.command(name='leaguecurrent', description="Get info about the current game of a player.")
-    @app_commands.guilds(discord.Object(600696326287785984))
+    @app_commands.guilds(discord.Object(817238795966611466))
     async def leaguecurrent(self, interaction:discord.Interaction, user:discord.User)->None:
         id = user.id
         author = interaction.user.display_name
@@ -182,7 +182,7 @@ class League(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='leaguefriends',description="List your friends and their current games.")
-    @app_commands.guilds(discord.Object(600696326287785984))
+    @app_commands.guilds(discord.Object(817238795966611466))
     async def leaguefriends(self, interaction:discord.Interaction)->None:
         id = interaction.user.id
         author = interaction.user.display_name
@@ -218,7 +218,7 @@ class League(commands.Cog):
         await ctx.send(f"Successfully removed {friends_summoner} from your friend list.")
 
     @app_commands.command(name='delleague',description="Remove user from your league friends.")
-    @app_commands.guilds(discord.Object(600696326287785984))
+    @app_commands.guilds(discord.Object(817238795966611466))
     async def delleagueApp(self, interaction:discord.Interaction, friend:discord.User)->None:
         id = interaction.user.id
         author = interaction.user.display_name
@@ -243,7 +243,7 @@ class League(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='addleague', description="Add a user to your league friends.")
-    @app_commands.guilds(discord.Object(600696326287785984))
+    @app_commands.guilds(discord.Object(817238795966611466))
     async def addleague(self, interaction:discord.Interaction, friend:discord.User)->None:
         id = interaction.user.id
         author = interaction.user.display_name
@@ -268,7 +268,7 @@ class League(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='unlinkleague', description="Unlink your associated league account.")
-    @app_commands.guilds(discord.Object(600696326287785984))
+    @app_commands.guilds(discord.Object(817238795966611466))
     async def unlinkleague(self, interaction:discord.Interaction):
         id = interaction.user.id
         display_name = interaction.user.display_name
@@ -283,7 +283,7 @@ class League(commands.Cog):
         await interaction.response.send_message(embed=embed)
         
     @app_commands.command(name='linkleague', description='Link a league account to your discord.')
-    @app_commands.guilds(discord.Object(600696326287785984))
+    @app_commands.guilds(discord.Object(817238795966611466))
     async def linkleague(self, interaction:discord.Interaction, summonername : str, region : str)->None:
         id = interaction.user.id
         if self.checkIfUserLinked(id):
