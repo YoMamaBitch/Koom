@@ -1,12 +1,34 @@
-import discord
+import discord, sqlite3
 from discord.ext import commands
 from discord.ui import Button
 
 league_content_url = 'https://thebestcomputerscientist.co.uk/league_content/'
+database = sqlite3.connect("database.sqlite")
+cursor : sqlite3.Cursor = database.cursor()
 
 def secondsToMinSecString(secs) -> str:
     m,s = divmod(secs,60)
     return "{:02d}:{:02d}".format(m,s)
+
+async def ensureUserInEconomy(id):
+    entry = await getUserEconomy(id)
+    if entry is not None:
+        return entry
+    cursor.execute(f'''INSERT INTO Economy (did,bank,lastdaily,coinflips,blackjacks,profit_blackjack,profit_coinflip) 
+    VALUES({id}, 100, 0, 0, 0, 0, 0)''')
+    database.commit()
+    return [id,100,0,0,0,0,0]
+
+async def getUserEconomy(id):
+    return cursor.execute(f'SELECT * FROM Economy WHERE did IS {id}').fetchone()
+
+async def sendMoneyToId(id,amount):
+    await ensureUserInEconomy(id)
+    user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+    newValue = user_data[1] + amount
+    cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did IS {id}''')
+    database.commit()
+    return
 
 def secondsToHHMMSS(secs)->str:
     s = secs
