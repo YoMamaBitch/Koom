@@ -1,4 +1,5 @@
 import json
+from threading import local
 import discord,secrets, utility, urllib.request
 from riotwatcher import ValWatcher
 from discord.ext import commands
@@ -9,7 +10,7 @@ class Valorant(commands.Cog):
         self.bot = bot 
         self.watcher = ValWatcher(secrets.valKey)
         self.initialiseContent()
-        #self.initialiseMaps(),
+        self.initialiseMaps()
 
     @commands.command(name='pullcontent')
     async def pullcontent(self, ctx):
@@ -22,17 +23,17 @@ class Valorant(commands.Cog):
             return
         self.content = content
         self.loadAbilities()
-        self.saveContentJson()
+        self.saveJson('localValorantContent/content.json', self.content)
         await ctx.send("Updated successfully.")
 
     def checkContentForAbilities(self):
         if self.content['characters'][0].get('abilities') == None:
             self.loadAbilities()
-            self.saveContentJson()
+            self.saveJson('localValorantContent/content.json', self.content)
 
-    def saveContentJson(self):
-        with open('localValorantContent/content.json', 'w', encoding='utf-8') as f:
-            f.write(json.dumps(self.content))
+    def saveJson(self, path, json):
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(json.dumps(json))
 
     def loadAbilities(self):
         url = 'https://valorant-api.com/v1/agents/'
@@ -52,6 +53,26 @@ class Valorant(commands.Cog):
                 print("Error loading the content. Pull a new copy.")
                 return
         self.checkContentForAbilities()
+
+    def initialiseMaps(self):
+        mapListUrl = 'https://valorant-api.com/v1/maps'
+        localMaps = []
+        try:
+            with urllib.request.urlopen(mapListUrl) as f:
+                remoteMaps = json.loads(f.read().decode('utf-8'))['data']
+        except:
+            print("Error getting remote maps")
+            return
+        with open('localValorantContent/maps.json', 'r', encoding='utf-8') as f:
+            try:
+                localMaps = json.loads(f.readline())        
+            except:
+                pass
+        for x in remoteMaps:
+            if x not in localMaps:
+                localMaps.append(x)
+        with open('localValorantContent/maps.json', 'w', encoding='utf-8') as f:
+            f.write(json.dumps(localMaps))
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Valorant(bot))
