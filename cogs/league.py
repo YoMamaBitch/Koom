@@ -13,6 +13,9 @@ MONEY_PER_ASSIST = 0.2
 MONEY_PER_VISION = 0.65
 MONEY_PER_TOWER_DAMAGE = 0.001
 MONEY_PER_CS = 0.25
+ARAM_MULTIPLIER = 0.5
+FEATURED_MULTIPLIER = 0.75
+SR_MULTIPLIER = 1.0
 
 class League(commands.Cog):
     def __init__(self,bot:commands.Bot)->None:
@@ -30,10 +33,10 @@ class League(commands.Cog):
         self.activeMatchHistories = []
         self.positiveEmotes = []
         self.negativeEmotes = []
-        with open ('leagueNegativeEmotes.txt', 'r', encoding='utf-8') as f:
+        with open ('localLeagueContent/leagueNegativeEmotes.txt', 'r', encoding='utf-8') as f:
             for line in f:
                 self.negativeEmotes.append(line)
-        with open('leaguePositiveEmotes.txt', 'r',encoding='utf-8') as f:
+        with open('localLeagueContent/leaguePositiveEmotes.txt', 'r',encoding='utf-8') as f:
             for line in f:
                 self.positiveEmotes.append(line)
 
@@ -57,6 +60,13 @@ class League(commands.Cog):
         league_puuid = userdata[2]
         player_matches_ids = self.watcher.match.matchlist_by_puuid(match_region, league_puuid, count=10)
         match_data = self.watcher.match.by_id(match_region, player_matches_ids[index-1])['info']
+        gm = self.getGameModeFromMatch(match_data)
+        if gm == 'ARAM':
+            multiplier = ARAM_MULTIPLIER
+        elif gm == 'FEATURED':
+            multiplier = FEATURED_MULTIPLIER
+        else:
+            multiplier = SR_MULTIPLIER
         duration = match_data['gameDuration'] / 60
         player_data = self.getPlayerDataFromMatch(match_data, userdata[3])
         kda = self.getKillsDeathsAssistsFromPlayerData(player_data)
@@ -68,11 +78,11 @@ class League(commands.Cog):
         desiredCS = duration * 10.0 # 10 cs/min
         visionRatio = vision / desiredVision
         csRatio = cs / desiredCS
-        moneyFromKills = kda[0] * MONEY_PER_KILL
-        moneyFromAssists = kda[2] * MONEY_PER_ASSIST
-        moneyFromVision = vision * visionRatio * MONEY_PER_VISION
-        moneyFromTowerDamage = tower_damage * MONEY_PER_TOWER_DAMAGE
-        moneyFromCS = cs * csRatio * MONEY_PER_CS
+        moneyFromKills = kda[0] * MONEY_PER_KILL * multiplier
+        moneyFromAssists = kda[2] * MONEY_PER_ASSIST * multiplier
+        moneyFromVision = vision * visionRatio * MONEY_PER_VISION * multiplier
+        moneyFromTowerDamage = tower_damage * MONEY_PER_TOWER_DAMAGE * multiplier
+        moneyFromCS = cs * csRatio * MONEY_PER_CS * multiplier
         moneyFromHighest = 0
         if highest is not None:
             if highest[0] == 'Triple':
@@ -111,7 +121,6 @@ class League(commands.Cog):
         await utility.sendMoneyToId(id, float(sum))
         database.commit()
         await interaction.response.send_message(embed=embed)
-
 
     @app_commands.command(name='leaguematches',description="List your recent League games.")
     @app_commands.guilds(discord.Object(600696326287785984))

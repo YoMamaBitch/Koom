@@ -148,6 +148,9 @@ class Music(commands.Cog):
         self.queue.append(data)
         if ctx.voice_client is not None and ctx.voice_client.is_playing():
             await self.sendSuccessQueue(ctx, data)
+        if self.reachedEnd:
+            self.queuePointer+=1
+            self.reachedEnd = False
         await self.tryPlay(ctx)
 
     async def tryPlay(self,ctx):
