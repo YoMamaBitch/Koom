@@ -1,7 +1,6 @@
-import json
+import json, datetime, os
 import discord,secrets, utility, urllib.request, urllib.parse, hashlib
-
-from numpy import character
+from PIL import Image, ImageFont, ImageDraw
 from riotwatcher import ValWatcher, RiotWatcher
 from discord.ext import commands
 from discord import app_commands
@@ -123,7 +122,7 @@ class Valorant(commands.Cog):
         if text is not None and emoji is None:
             embed_data['matchIndex'] = int(text) - 1 + embed_data['start']
             match_data = embed_data['matches'][embed_data['matchIndex']]
-            embed = self.generateMatchEmbed(match_data, embed_data['display_name'], 
+            embed = await self.generateMatchEmbed(match_data, embed_data['display_name'], 
                     embed_data['display_url'], embed_data['playercard'], embed_data['puuid'])
             view.enableMatch()
             await interaction.response.send_message(embed=embed, view=view)
@@ -133,7 +132,7 @@ class Valorant(commands.Cog):
         embed = self.generateMatchOverview(view.match_embed_data)
         await interaction.response.send_message(embed=embed,view=view)
 
-    def generateMatchEmbed(self, match_data, display_name, display_icon, playercard, puuid):
+    async def generateMatchEmbed(self, match_data, display_name, display_icon, playercard, puuid):
         mapName = self.getMapNameFromMatch(match_data)
         win = self.getMatchResult(match_data, puuid)
         if win:
@@ -162,7 +161,103 @@ class Valorant(commands.Cog):
             abilityCodeBlock += f'{key} : {abilityUses[key]}\n'
         abilityCodeBlock += '```'
         embed.add_field(name="Ability Usage",value=abilityCodeBlock,inline=False)
+        matchImageFile = self.makeMatchImage(match_data, team, party, puuid)
+        file = discord.File(matchImageFile, filename='image.png')
+        vKChannel = self.bot.get_channel(secrets.valImageChannel)
+        img_msg = await vKChannel.send(file=file)
+        img_url = img_msg.attachments[0].url
+        embed.set_image(url=img_url)
+        os.remove(matchImageFile)
         return embed
+
+    def getTeamData(self, players, teamId):
+        team = []
+        for x in players:
+            if x['teamId'] == teamId:
+                for y in self.content['playerTitles']:
+                    if y['id'].lower() == x['playerTitle'].lower():
+                        title = y['name'].removesuffix('Title')
+                        break
+                team.append([x['gameName'], x['characterId'].upper(),title, x['puuid']])
+        return team
+
+    def makeMatchImage(self, data, team, party, puuid):
+        players = data['players']
+        redTeam = self.getTeamData(players,'Red')
+        blueTeam = self.getTeamData(players,'Blue')
+        mapId = data['matchInfo']['mapId'].upper()
+        mapId = self.getMapIdFromAssetPath(data['matchInfo']['mapId'])
+        backImage = Image.open(f'localValorantContent/mapborders/{mapId}.png')
+        charPos = [-70,150]
+        if team == 'Blue':
+            myTeamText = 'Defense'
+            myTeamCol = (29,238,242)
+            otherTeamCol = (224,61,43)
+            otherTeamText = 'Attach'
+        else:
+            myTeamText = 'Attack'
+            myTeamCol = (224,61,43)
+            otherTeamCol = (29,238,242)
+            otherTeamText = 'Defense'
+        myTeamPos = [10, 40]
+        otherTeamPos = [750, 40]
+        ##draw text#
+        draw = ImageDraw.Draw(backImage)
+        font = ImageFont.truetype('localValorantContent/ValorantFont.ttf', 128)
+        draw.text(myTeamPos, myTeamText, myTeamCol, font=font, stroke_width=2, stroke_fill=(0,0,0))
+        draw.text(otherTeamPos, otherTeamText, otherTeamCol, font=font, stroke_width=2, stroke_fill=(0,0,0))
+        ##
+        if team == 'Red':
+            self.drawMyTeam(backImage, puuid, redTeam, party, charPos)
+            charPos[0] += 150
+            self.drawOtherTeam(backImage, blueTeam, charPos)
+        elif team == 'Blue':
+            self.drawMyTeam(backImage,puuid, blueTeam, party, charPos)
+            charPos[0] += 150
+            self.drawOtherTeam(backImage, redTeam,party, charPos)
+        file = f"{datetime.datetime.now().strftime('%H-%M-%S')}.png"
+        backImage.save(file)
+        return file
+    
+
+    def drawMyTeam(self, image : Image.Image, playerId, team, party, start):
+        copy = [start[0], start[1]]
+        party_icon = Image.open(f'localValorantContent/partyIcon.png')
+        player_icon = Image.open(f'localValorantContent/playerIcon.png')
+        thickFont = ImageFont.truetype('localValorantContent/CafeBold.ttf', 15)
+        lightFont = ImageFont.truetype('localValorantContent/Cafe.ttf', 14)
+        for player in team:
+            charId = player[1]
+            char_img = Image.open(f'localValorantContent/agentbusts/{charId}.png')
+            char_img.thumbnail((256,256), Image.ANTIALIAS)
+            image.paste(char_img, (copy[0],copy[1]), char_img)
+            copy[0] += 115
+
+        for player in team:
+            draw = ImageDraw.Draw(image)
+            nameratio = len(player[0]) / 10.0
+            titleratio = 10.0 / len(player[1])
+            xNamePos = float(start[0] + 115.0 - (22 * nameratio))
+            xTitlePos = float(start[0] + 115.0 * titleratio)
+            draw.text((xNamePos,start[1]+130), player[0], font=thickFont,stroke_width=1, stroke_fill=(0,0,0))
+            #draw.text((xTitlePos,start[1]+150), player[2], font=lightFont, strok_width=1, stroke_fill=(0,0,0))
+            for p in party:
+                if p == player[3]:
+                    party_icon.thumbnail((32,32), Image.ANTIALIAS)
+                    image.paste(party_icon, (start[0] + 120,start[1]-35), party_icon)
+            if player[3] == playerId:
+                player_icon.thumbnail((32,32), Image.ANTIALIAS)
+                image.paste(player_icon, (start[0] + 120,start[1]-35), player_icon)
+
+            start[0] += 115
+            
+    def drawOtherTeam(self, image : Image.Image, team, start):
+        for player in team:
+            charId = player[1]
+            char_img = Image.open(f'localValorantContent/agentbusts/{charId}.png')
+            char_img.thumbnail((256,256), Image.ANTIALIAS)
+            image.paste(char_img, (start[0],start[1]), char_img)
+            start[0] += 115
 
     def getMatchLength(self, match):
         lengthMs = match['matchInfo']['gameLengthMillis']
@@ -207,6 +302,14 @@ class Valorant(commands.Cog):
 
     def getMatchRounds(self, match_data):
         return match_data['roundResults']
+
+    def getMapIdFromAssetPath(self, map):
+        maps = self.content['maps']
+        for x in maps:
+            if x.get('assetPath') == None:
+                continue
+            if map == x['assetPath']:
+                return x['id']
 
     def getMapNameFromMatch(self,match):
         maps = self.content['maps']
@@ -272,7 +375,7 @@ class Valorant(commands.Cog):
         party = []
         for p in players:
             if p['partyId'] == partyId:
-                party.append([p['gameName'],p['playerCard'],p['playerTitle'],p['competitiveTier']])
+                party.append(p['puuid'])
         return party
 
     def getPlayerTitleFromMatch(self, match,puuid):
