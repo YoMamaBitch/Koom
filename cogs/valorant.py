@@ -193,14 +193,14 @@ class Valorant(commands.Cog):
             myTeamText = 'Defense'
             myTeamCol = (29,238,242)
             otherTeamCol = (224,61,43)
-            otherTeamText = 'Attach'
+            otherTeamText = 'Attack'
         else:
             myTeamText = 'Attack'
             myTeamCol = (224,61,43)
             otherTeamCol = (29,238,242)
             otherTeamText = 'Defense'
-        myTeamPos = [10, 40]
-        otherTeamPos = [750, 40]
+        myTeamPos = [10, 10]
+        otherTeamPos = [750, 10]
         ##draw text#
         draw = ImageDraw.Draw(backImage)
         font = ImageFont.truetype('localValorantContent/ValorantFont.ttf', 128)
@@ -214,7 +214,7 @@ class Valorant(commands.Cog):
         elif team == 'Blue':
             self.drawMyTeam(backImage,puuid, blueTeam, party, charPos)
             charPos[0] += 150
-            self.drawOtherTeam(backImage, redTeam,party, charPos)
+            self.drawOtherTeam(backImage, redTeam, charPos)
         file = f"{datetime.datetime.now().strftime('%H-%M-%S')}.png"
         backImage.save(file)
         return file
