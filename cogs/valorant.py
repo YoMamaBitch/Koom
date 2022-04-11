@@ -19,6 +19,8 @@ class Valorant(commands.Cog):
         17:'Platinum III',18:'Diamond I',19:'Diamond II',20:'Diamond III',21:'Immortal I',22:'Immortal II', 23:'Immortal III', 24:'Radiant'}
         self.initialiseContent()
         self.initialiseMaps()
+        with open('localValorantContent/maps.json', 'r', encoding='utf-8') as f:
+            self.maps = json.loads(f.readline())
 
     
     @app_commands.command(name='valorantmatches',description='Unlink your valorant account from discord.')
@@ -34,13 +36,13 @@ class Valorant(commands.Cog):
         await interaction.response.defer(thinking=True)
         userdata = utility.cursor.execute('SELECT * FROM Valorant WHERE did IS ?',(id,)).fetchone()
         puuid = userdata[3]
-        matchlist = self.watcher.match.matchlist_by_puuid('EU', puuid)['history']
+        matchlist = self.watcher.match.matchlist_by_puuid('EU', puuid)['history'][:30]
         match1 = self.watcher.match.by_id('EU',matchlist[0]['matchId'])
         player_card = self.getPlayerCardFromMatch(match1, puuid)
         matches = [match1]
         embed_data = {'id':id, 'start':0, 'end':5, 'matches':matches, 'matchlist':matchlist,
                     'puuid':puuid, 'display_name':author_name, 'display_url':avatar_url, 'playercard':player_card,
-                    'matchIndex':0, 'roundIndex':0}
+                    'matchIndex':0, 'roundIndex':0, 'eventIndex':-1}
         view = ValorantMatchView(embed_data, self)
         embed_data['view'] = view
         embed = self.generateMatchOverview(embed_data)
@@ -125,12 +127,302 @@ class Valorant(commands.Cog):
             embed = await self.generateMatchEmbed(match_data, embed_data['display_name'], 
                     embed_data['display_url'], embed_data['playercard'], embed_data['puuid'])
             view.enableMatch()
-            await interaction.response.send_message(embed=embed, view=view)
+            await interaction.response.edit_message(embed=embed, view=view)
             return
-        
+        if text.startswith('Prev'):
+            if text == 'Prev':
+                if embed_data['start'] > 0:
+                    embed_data['start'] -= 6
+                    embed_data['end'] -= 6
+                    embed = self.generateMatchOverview(embed_data)
+                    view.enableOverview()
+                    await interaction.response.edit_message(embed=embed, view=view)
+                return
+            elif text.__contains__('Round'):
+                if embed_data['roundIndex'] > 0:
+                    embed_data['roundIndex'] -=1
+                    embed_data['eventIndex'] = -1
+                    embed = await  self.generateRoundEmbed(embed_data)
+                    view.enableRound()
+                    await interaction.response.edit_message(embed=embed, view=view)
+                return
+            elif text.__contains__('Event'):
+                if embed_data['eventIndex'] > -1:
+                    embed_data['eventIndex'] -=1
+                    embed= await self.generateRoundEmbed(embed_data)
+                    view.enableRound()
+                    await interaction.response.edit_message(embed=embed,view=view)
+        elif text.startswith('Next'):
+            if text =='Next':
+                if (embed_data['end'] < len(embed_data['matchlist'])-1):
+                    embed_data['end'] +=6
+                    embed_data['start'] +=6
+                    embed = self.generateMatchOverview(embed_data)
+                    view.enableOverview()
+                    await interaction.response.edit_message(embed=embed,view=view)
+                return
+            elif text.__contains__('Round'):
+                maxRoundNum = len(self.getMatchRounds(embed_data['matches'][embed_data['matchIndex']]))
+                if embed_data['roundIndex'] <= maxRoundNum-1:
+                    view.enableRound()
+                    embed_data['eventIndex'] = -1
+                    embed_data['roundIndex'] +=1
+                    embed = await self.generateRoundEmbed(embed_data)
+                    await interaction.response.edit_message(embed=embed, view=view)
+                return
+            elif text.__contains__('Event'):
+                game = embed_data['matches'][embed_data['matchIndex']]
+                round = game['roundResults'][embed_data['roundIndex']]
+                eventNum = len(self.getEventsInRound(round, game, embed_data['puuid']))
+                if embed_data['eventIndex'] < eventNum-1:
+                    embed_data['eventIndex'] +=1
+                    embed= await self.generateRoundEmbed(embed_data)
+                    view.enableRound()
+                    await interaction.response.edit_message(embed=embed,view=view)
+                return
+        embed_data['eventIndex'] = 0
+        embed_data['roundIndex'] = 0
         view.enableOverview()
         embed = self.generateMatchOverview(view.match_embed_data)
-        await interaction.response.send_message(embed=embed,view=view)
+        await interaction.response.edit_message(embed=embed,view=view)
+
+    async def generateRoundEmbed(self, embed_data):
+        game = embed_data['matches'][embed_data['matchIndex']]
+        round = game['roundResults'][embed_data['roundIndex']]
+        eventIndex = embed_data['eventIndex']
+        if eventIndex == -1:
+            return self.generateRoundOverview(round, embed_data, game, embed_data['puuid']) 
+        return await self.generateEventEmbed(round, embed_data, game, embed_data['puuid'])
+
+    async def generateEventEmbed(self, round, embed_data, match, puuid):
+        eventList = self.getEventsInRound(round, match, puuid)
+        event = eventList[embed_data['eventIndex']]
+        eventNumberString = f"{embed_data['eventIndex']+1}/{len(eventList)}" 
+        if event[0] == 'kill':
+            return await self.generateKillEmbed(match, event, eventNumberString, puuid)
+        elif event[0] == 'bombplanted':
+            return await self.generatePlantEmbed(match, event, eventNumberString, puuid)
+        else:
+            return await self.generateDefuseEmbed(match, event, eventNumberString, puuid)
+           
+    def generateBombImage(self, match, event,puuid):
+        mapId = self.getMapIdFromAssetPath(match['matchInfo']['mapId']).lower()
+        for map in self.maps:
+            if map['uuid'].upper() == mapId.upper():
+                mapData = map
+                break
+        backImage = Image.open(f'localValorantContent/minimaps/{mapId}.png')
+        draw = ImageDraw.Draw(backImage)
+        playerTeam = self.getPlayerTeamFromMatch(match,puuid)
+        spikeX = event[5]['y'] * mapData['xMultiplier'] + mapData['xScalarToAdd']
+        spikeY = event[5]['x'] * mapData['yMultiplier'] + mapData['yScalarToAdd']
+        spikeX *= backImage.width
+        spikeY *= backImage.height
+        font = ImageFont.truetype("localValorantContent/ValorantFont.ttf",30)
+        draw.text((spikeX-15,spikeY-15), "B", (229,255,0), font=font, stroke_fill=(0,0,0),stroke_width=1)
+        for player in event[4]:
+            if self.getPlayerTeamFromMatch(match,player['puuid']) == playerTeam:
+                colour = (67,213,230)
+            else:
+                colour = (227,39,42)
+            x = player['location']['y'] * mapData['xMultiplier'] + mapData['xScalarToAdd']
+            y = player['location']['x'] * mapData['yMultiplier'] + mapData['yScalarToAdd']
+            x *= backImage.width
+            y *= backImage.height
+            #draw.ellipse((0,0,50,50), fill=colour, outline=(0,0,0))
+            draw.ellipse((x-10,y-10,x+10,y+10), fill=colour, outline=(0,0,0))
+        file = f"{datetime.datetime.now().strftime('%H-%M-%S')}minimap.png"
+        backImage.save(file)
+        return file
+
+    def generateKillEventImage(self, match, event, puuid):
+        mapId = self.getMapIdFromAssetPath(match['matchInfo']['mapId']).lower()
+        for map in self.maps:
+            if map['uuid'].upper() == mapId.upper():
+                mapData = map
+                break
+        backImage = Image.open(f'localValorantContent/minimaps/{mapId}.png')
+        draw = ImageDraw.Draw(backImage)
+        playerTeam = self.getPlayerTeamFromMatch(match,puuid)
+        victimX = event[6]['y'] * mapData['xMultiplier'] + mapData['xScalarToAdd']
+        victimY = event[6]['x'] * mapData['yMultiplier'] + mapData['yScalarToAdd']
+        victimX *= backImage.width
+        victimY *= backImage.height
+        font = ImageFont.truetype("localValorantContent/ValorantFont.ttf",30)
+        draw.text((victimX-15,victimY-15), "X", (195,0,255), font=font, stroke_fill=(0,0,0),stroke_width=1)
+        for player in event[5]:
+            if self.getPlayerTeamFromMatch(match,player['puuid']) == playerTeam:
+                colour = (67,213,230)
+                if player['puuid'] == event[7]:
+                    colour = (8,0,255)
+            else:
+                colour = (227,39,42)
+                if player['puuid'] == event[7]:
+                    colour = (242,88,27)
+            x = player['location']['y'] * mapData['xMultiplier'] + mapData['xScalarToAdd']
+            y = player['location']['x'] * mapData['yMultiplier'] + mapData['yScalarToAdd']
+            x *= backImage.width
+            y *= backImage.height
+            #draw.ellipse((0,0,50,50), fill=colour, outline=(0,0,0))
+            draw.ellipse((x-10,y-10,x+10,y+10), fill=colour, outline=(0,0,0))
+        file = f"{datetime.datetime.now().strftime('%H-%M-%S')}minimap.png"
+        backImage.save(file)
+        return file
+
+
+    def getEventsInRound(self, round,match, puuid):
+        events = []
+        playerTeam = self.getPlayerTeamFromMatch(match,puuid)
+        teamData = self.getTeamData(match['players'], playerTeam)
+        if round['bombPlanter'] is not None:
+            planterId = round['bombPlanter']
+            charName = self.getAgentOrNameBasedOnInTeam(match,teamData, planterId)
+            events.append(('bombplanted', round['plantRoundTime'], round['bombPlanter'],charName, round['plantPlayerLocations'], round['plantLocation']))
+        if round['bombDefuser'] is not None:
+            defuserId = round['bombDefuser']
+            charName = self.getAgentOrNameBasedOnInTeam(match,teamData, defuserId)
+            events.append(('bombdefused', round['defuseRoundTime'], round['bombDefuser'],charName,round['defusePlayerLocations'],round['defuseLocation']))
+        for player in round['playerStats']:
+            for kill in player['kills']:
+                killerId = kill['killer']
+                victimId = kill['victim']
+                killerCharName = self.getAgentOrNameBasedOnInTeam(match,teamData, killerId)
+                victimCharName = self.getAgentOrNameBasedOnInTeam(match,teamData, victimId)
+                item = self.getWeaponNameFromID(kill['finishingDamage']['damageItem'])
+                if kill['finishingDamage']['damageType'] == 'Bomb':
+                    continue
+                if item is None:
+                    ability = kill['finishingDamage']['damageItem']
+                    agentId = self.getAgentFromMatchPUUID(match, killerId)
+                    item = self.getAbilityNameFromAgentID(ability, agentId)
+                events.append(('kill', kill['timeSinceRoundStartMillis'],killerCharName,victimCharName,item, kill['playerLocations'], kill['victimLocation'], killerId))
+        events = sorted(events, key=lambda x:x[1])
+        return events      
+
+    def getAbilityNameFromAgentID(self, killerAbility, agentId):
+        for x in self.content['characters']:
+            if x['id'] == agentId.upper():
+                for ability in x['abilities']:
+                    if ability['slot'] == killerAbility:
+                        return ability['displayName']
+
+    def getAgentFromMatchPUUID(self,match, id):
+        for x in match['players']:
+            if x['puuid'] == id:
+                return x['characterId']
+
+    async def generateKillEmbed(self,match, event, eventNumberString, puuid):
+        embed = discord.Embed(title='Kill', color=0x726ce6)
+        embed.set_author(name=f'Event {eventNumberString}')
+        embed.add_field(name='Killer',value=f'```yaml\n{event[2]}\n```', inline=False)
+        embed.add_field(name='Victim', value=f'```yaml\n{event[3]}\n```', inline=False)
+        embed.add_field(name='Weapon',value=f'```yaml\n{event[4]}\n```')
+        timeSinceRoundStart = utility.secondsToMinSecString(int(event[1]/1000))
+        embed.add_field(name='Time', value=f'```yaml\n{timeSinceRoundStart}\n```')
+        img_filePath = self.generateKillEventImage(match, event, puuid)
+        file = discord.File(img_filePath, filename='minimap.png')
+        vKChannel = self.bot.get_channel(secrets.valImageChannel)
+        img_msg = await vKChannel.send(file=file)
+        embed.set_image(url=img_msg.attachments[0].url)
+        os.remove(img_filePath)
+        return embed
+
+    async def generatePlantEmbed(self,match, event, eventNumberString, puuid):
+        embed = discord.Embed(title='Bomb Planted', color=0xff0303)
+        embed.set_author(name=f'Event {eventNumberString}')
+        embed.add_field(name='Planted By:', value=f'```yaml\n{event[3]}\n```', inline=False)
+        timeSinceRoundStart = utility.secondsToMinSecString(int(event[1]/1000))
+        embed.add_field(name='Planted At:',value=f'```yaml\n{timeSinceRoundStart}\n```', inline=False)
+        img_filePath = self.generateBombImage(match, event, puuid)
+        file = discord.File(img_filePath, filename='minimap.png')
+        vKChannel = self.bot.get_channel(secrets.valImageChannel)
+        img_msg = await vKChannel.send(file=file)
+        embed.set_image(url=img_msg.attachments[0].url)
+        os.remove(img_filePath)
+        return embed
+
+    async def generateDefuseEmbed(self,match,  event, eventNumberString, puuid):
+        embed = discord.Embed(title='Bomb Defused', color=0x38ffaf)
+        embed.set_author(name=f'Event {eventNumberString}')
+        embed.add_field(name='Defused By:', value=f'```yaml\n{event[3]}\n```', inline=False)
+        timeSinceRoundStart = utility.secondsToMinSecString(int(event[1]/1000))
+        embed.add_field(name='Defused At:',value=f'```yaml\n{timeSinceRoundStart}\n```', inline=False)
+        img_filePath = self.generateBombImage(match, event, puuid)
+        file = discord.File(img_filePath, filename='minimap.png')
+        vKChannel = self.bot.get_channel(secrets.valImageChannel)
+        img_msg = await vKChannel.send(file=file)
+        embed.set_image(url=img_msg.attachments[0].url)
+        os.remove(img_filePath)
+        return embed
+
+    def generateRoundOverview(self,round,embed_data, match,puuid):
+        if round['roundResult'] == 'Surrendered':
+            embed = discord.Embed(title='Surrendered', color=0xffffff)
+            embed_data['view'].enableBackOnly()
+            return embed 
+        roundNum = round['roundNum']
+        roundCeremony = round['roundCeremony']
+        winningTeam = round['winningTeam']
+        playerTeam = self.getPlayerTeamFromMatch(match,puuid)
+        otherTeam = 'Red' if playerTeam == 'Blue' else 'Blue'
+        match = embed_data['matches'][embed_data['matchIndex']]
+        roundWins = self.getWinsAtRound(match,embed_data['roundIndex'], playerTeam)
+        roundLosses = self.getWinsAtRound(match,embed_data['roundIndex'], otherTeam)
+        if winningTeam == playerTeam:
+            won = 'Win'
+            color=0x2fc256
+        else:
+            won = 'Lost'
+            color=0xdb4527
+        for x in round['playerStats']:
+            if x['puuid'] == puuid:
+                player = x
+        kills = len(player['kills'])
+        damage = 0
+        for dmg in player['damage']:
+            damage += dmg['damage']
+        eco = player['economy']
+        ecoSpent = eco['spent']
+        ecoRemainig = eco['remaining']
+        ecoStart = ecoRemainig + ecoSpent
+        title = f"{roundNum} - {won} - {roundWins}:{roundLosses}"
+        if roundCeremony != 'CeremonyDefault' and roundCeremony != '': 
+            title += f" - {roundCeremony.removeprefix('Ceremony')}"
+        embed= discord.Embed(title=title,color=color)
+        
+        embed.set_author(name=embed_data['display_name'],icon_url=embed_data['display_url'])
+        embed.add_field(name='Damage', value=f'```yaml\n{damage}\n```')
+        embed.add_field(name='Kills', value=f'```yaml\n{kills}\n```')
+        embed.add_field(name='\u200b', value='\u200b')
+        embed.add_field(name='Start', value=f'```yaml\n${ecoStart}\n```')
+        embed.add_field(name='Spent', value=f'```yaml\n${ecoSpent}\n```')
+        embed.add_field(name='Remaining', value=f'```yaml\n${ecoRemainig}\n```')
+        return embed        
+
+    def getAgentOrNameBasedOnInTeam(self,match,teamdata, id):
+        for x in teamdata:
+            if x[3] == id:
+                return x[0]
+        return self.getAgentFromMatch(match, id)
+
+    def getWinsAtRound(self, match, roundIndex, team):
+        rounds = match['roundResults']
+        teamWins = 0
+        for i in range(0,roundIndex):
+            round_data = rounds[i]
+            if round_data['winningTeam'] == team:
+                teamWins += 1
+        return teamWins
+
+    def getWeaponNameFromID(self, id):
+        for x in self.content['equips']:
+            if x['id'] == id:
+                return x['name']
+
+    def getAgentNameFromID(self, id):
+        for x in self.content['characters']:
+            if x['id'].upper() == id.upper():
+                return x['name']
 
     async def generateMatchEmbed(self, match_data, display_name, display_icon, playercard, puuid):
         mapName = self.getMapNameFromMatch(match_data)
@@ -139,7 +431,8 @@ class Valorant(commands.Cog):
             color = 0x25c242
         else:
             color = 0xd6392b
-        embed = discord.Embed(title=mapName, color=color)
+        resultString = self.getMatchResultRounds(match_data, puuid)            
+        embed = discord.Embed(title=f'{mapName} - {resultString}', color=color)
         embed.set_author(name=display_name, icon_url=display_icon)
         team = self.getPlayerTeamFromMatch(match_data,puuid)
         party = self.getPlayerPartyFromMatch(match_data,puuid)
@@ -169,6 +462,18 @@ class Valorant(commands.Cog):
         embed.set_image(url=img_url)
         os.remove(matchImageFile)
         return embed
+
+    def getMatchResultRounds(self, match_data, puuid):
+        playerTeam = self.getPlayerTeamFromMatch(match_data, puuid)
+        teamData = match_data['teams']
+        playerTeamNum : str
+        enemyTeamNum : str
+        for x in teamData:
+            if x['teamId'] == playerTeam:
+                playerTeamNum = x['roundsWon']
+            else:
+                enemyTeamNum = x['roundsWon']
+        return f"{playerTeamNum} : {enemyTeamNum}"
 
     def getTeamData(self, players, teamId):
         team = []
@@ -219,7 +524,6 @@ class Valorant(commands.Cog):
         backImage.save(file)
         return file
     
-
     def drawMyTeam(self, image : Image.Image, playerId, team, party, start):
         copy = [start[0], start[1]]
         party_icon = Image.open(f'localValorantContent/partyIcon.png')
