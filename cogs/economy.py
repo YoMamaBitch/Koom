@@ -19,7 +19,6 @@ class Economy(commands.Cog):
         id = interaction.user.id
         display_name = interaction.user.display_name
         balance = await utility.ensureUserInEconomy(id)
-        balance = balance[1]
         embed = utility.generateBalanceEmbed(display_name,balance)
         await interaction.response.send_message(embed=embed)
 

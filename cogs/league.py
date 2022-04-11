@@ -42,7 +42,7 @@ class League(commands.Cog):
 
     @app_commands.command(name='claimleague',description="Claim one of your recent 10 league games.")
     @app_commands.guilds(discord.Object(817238795966611466))
-    async def claimleague(self, interaction:discord.Interaction, index:int)->None:
+    async def claimleague(self, interaction:discord.Interaction, index:app_commands.Range[int,1,10])->None:
         id = interaction.user.id
         author = interaction.user.display_name
         url = interaction.user.display_avatar.url
@@ -119,6 +119,7 @@ class League(commands.Cog):
         claimed = '`'.join(claimed_games).removeprefix('`')
         cursor.execute("UPDATE League SET claimed = ? WHERE did IS ?",(claimed,id,))
         await utility.sendMoneyToId(id, float(sum))
+        await utility.addLeagueProfit(id,float(sum))
         database.commit()
         await interaction.response.send_message(embed=embed)
 
@@ -316,14 +317,6 @@ class League(commands.Cog):
         return [
             app_commands.Choice(name=region, value=region)
             for region in regions if current.lower() in region.lower()
-        ]
-
-    @claimleague.autocomplete('index')
-    async def linkerAutocomplete(self, interaction: discord.Interaction, current:int)->List[app_commands.Choice[int]]:
-        options = [1,2,3,4,5,6,7,8,9,10]
-        return[
-            app_commands.Choice(name=index, value=index)
-            for index in options if index in options
         ]
 
     ##### LEAGUE UTILITY #######

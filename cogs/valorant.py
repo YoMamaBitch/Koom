@@ -1,10 +1,22 @@
 import json, datetime, os
+from re import U
 import discord,secrets, utility, urllib.request, urllib.parse, hashlib
 from PIL import Image, ImageFont, ImageDraw
+from typing import List
+from utility import *
 from riotwatcher import ValWatcher, RiotWatcher
 from discord.ext import commands
 from discord import app_commands
 from valorant_view import ValorantMatchView
+
+MONEY_PER_KILL = 0.7
+MONEY_PER_ASSIST = 0.25
+MONEY_PER_PLANT = 0.5
+MONEY_PER_DEFUSE = 0.5
+MONEY_PER_ACE = 2.5
+SPIKE_MULTIPLIER = 0.25
+UNRATED_MULTIPLIER = 1.0
+COMP_MULTIPLIER = 1.5
 
 class Valorant(commands.Cog):
     def __init__(self,bot:commands.Bot)->None:
@@ -21,8 +33,79 @@ class Valorant(commands.Cog):
         self.initialiseMaps()
         with open('localValorantContent/maps.json', 'r', encoding='utf-8') as f:
             self.maps = json.loads(f.readline())
+        with open('localValorantContent/gamemodes.json', 'r', encoding='utf-8') as f:
+            self.gamemodes = json.loads(f.readline())['data']
+            
 
     
+    @app_commands.command(name='claimvalorant',description='Claim one of your recent 10 Valorant matches. Spike gains are reduced, deathmatch is disabled.')
+    @app_commands.guilds(discord.Object(817238795966611466))
+    async def claimvalorant(self, interaction:discord.Interaction, index:app_commands.Range[int,1,10])->None:
+        id = interaction.user.id
+        author_name = interaction.user.display_name
+        avatar_url = interaction.user.display_avatar.url
+        self.ensureUserInDatabase(id)
+        if not self.userAuthenticated(id):
+            await interaction.response.send_message("You have not been authenticated, use /linkvalorant.")
+            return
+        #await interaction.response.defer(thinking=True)
+        puuid = utility.cursor.execute('SELECT puuid FROM Valorant WHERE did IS ?',(id,)).fetchone()[0]
+        matchlist = self.watcher.match.matchlist_by_puuid('EU',puuid)['history'][:10]
+        match = self.watcher.match.by_id('EU',matchlist[index-1]['matchId'])
+        claimed = cursor.execute("SELECT claimed FROM Valorant WHERE did IS ?",(id,)).fetchone()[0]
+        claimedMatches = claimed.split('`')
+        if matchlist[index-1]['matchId'] in claimedMatches:
+            await interaction.response.send_message("You've already claimed that match.", ephemeral=True)
+            return
+        gamemode = match['matchInfo']['gameMode']
+        if 'QuickBomb' in gamemode:
+            displayUrl = 'https://media.valorant-api.com/gamemodes/57038d6d-49b1-3a74-c5ef-3395d9f23a97/displayicon.png'
+        elif 'Bomb' in gamemode:
+            displayUrl = 'https://media.valorant-api.com/gamemodes/96bd3920-4f36-d026-2b28-c683eb0bcac5/displayicon.png'
+        queue = match['matchInfo']['queueId']
+        validQueues = ['unrated', 'competitive','spikerush']
+        if queue not in validQueues:
+            await interaction.response.send_message("You can't claim a deathmatch or special game mode.", ephemeral=True)
+            return
+        if queue == 'unrated':
+            multiplier = UNRATED_MULTIPLIER
+        elif queue == 'competitive':
+            multiplier = COMP_MULTIPLIER
+        elif queue == 'spikerush':
+            multiplier = SPIKE_MULTIPLIER
+        data = self.getPlayerDataFromMatch(match,puuid)['stats']
+        kills = data['kills']
+        assists = data['assists']
+        missingData = self.getUserPlantsDefusesAces(match, puuid)
+        plants = missingData[0]
+        defuses = missingData[1]
+        aces = missingData[2]
+        killMoney = kills * MONEY_PER_KILL * multiplier
+        assistMoney = assists * MONEY_PER_ASSIST * multiplier
+        plantMoney = plants *MONEY_PER_PLANT * multiplier
+        defuseMoney = defuses * MONEY_PER_DEFUSE * multiplier
+        aceMoney = aces * MONEY_PER_ACE * multiplier
+        sum = killMoney + assistMoney + plantMoney + defuseMoney + aceMoney
+        embed = discord.Embed(title='Claimed £{:.02f} from {} Game'.format(sum,queue.title()), color=0x08d427, description=f"Multiplier = {multiplier}x")
+        embed.set_author(name=author_name,icon_url=avatar_url)
+        embed.set_thumbnail(url=displayUrl)
+        embed.add_field(name='Kill Money', value='```yaml\n{} = £{:.02f}\n```'.format(kills, killMoney))
+        embed.add_field(name='Assist Money', value='```yaml\n{} = £{:.02f}\n```'.format(assists, assistMoney))
+        embed.add_field(name='\u200b', value='\u200b')
+        embed.add_field(name='Plant Money', value='```yaml\n{} = £{:.02f}\n```'.format(plants, plantMoney))
+        embed.add_field(name='Defuse Money', value='```yaml\n{} = £{:.02f}\n```'.format(defuses, defuseMoney))
+        embed.add_field(name='\u200b', value='\u200b')
+        if aceMoney > 0:
+            embed.add_field(name='Ace Money', value='```yaml\n{} = £{:.02f}\n```'.format(aces, aceMoney),inline=False)
+        await utility.sendMoneyToId(id, float(sum))
+        await utility.addValorantProfit(id,float(sum))
+        claimedMatches.append(matchlist[index-1]['matchId'])
+        claimed = '`'.join(claimedMatches).removeprefix('`')
+        utility.cursor.execute("UPDATE Valorant SET claimed = ? WHERE did IS ?",(claimed,id,))
+        utility.database.commit()
+        await interaction.response.send_message(embed=embed)
+
+
     @app_commands.command(name='valorantmatches',description='Unlink your valorant account from discord.')
     @app_commands.guilds(discord.Object(817238795966611466))
     async def valorantmatches(self, interaction:discord.Interaction)->None:
@@ -97,6 +180,24 @@ class Valorant(commands.Cog):
         await ctx.send("Updated successfully.")
 
     ######### UTILITY ###################
+
+    def getUserPlantsDefusesAces(self, match, puuid):
+        rounds = match['roundResults']
+        plants = 0
+        defuses = 0
+        aces = 0
+        for round in rounds:
+            if round['bombPlanter'] == puuid:
+                plants += 1
+            if round['bombDefuser'] == puuid:
+                defuses += 1
+            if not round['roundCeremony'].__contains__('Ace'):
+                continue
+            playerStats = round['playerStats']
+            for player in playerStats:
+                if player['puuid'] == puuid and player['kills'] >= 5:    
+                    aces+=1
+        return (plants,defuses,aces)
 
     def generateMatchOverview(self, embed_data):
         #0 = did, 1 = start, 2=end,3=matches,4=matchlist,5=puuid,6=author_name,7=avatar_url,8=playercard,9=view, 10 = round
@@ -713,7 +814,7 @@ class Valorant(commands.Cog):
         entry = self.ensureUserInDatabase(id)
         if entry is None:
             utility.cursor.execute('''INSERT INTO Valorant 
-            VALUES(?,?,?,?,?,?,?,?)''', (id,None,0,None,None,None,None,None,))
+            VALUES(?,?,?,?,?,?,?,?,?)''', (id,None,0,None,None,None,None,None,'',))
             return False
         if entry[2] == 1:
             return True

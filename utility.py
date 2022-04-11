@@ -10,14 +10,30 @@ def secondsToMinSecString(secs) -> str:
     m,s = divmod(secs,60)
     return "{:02d}:{:02d}".format(m,s)
 
+async def addValorantProfit(id,amount):
+    await ensureUserInEconomy(id)
+    user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+    newValue = user_data[8] + amount
+    cursor.execute(f'''UPDATE Economy SET profit_valorant = {newValue} WHERE did IS {id}''')
+    database.commit()
+    return
+
+async def addLeagueProfit(id,amount):
+    await ensureUserInEconomy(id)
+    user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+    newValue = user_data[7] + amount
+    cursor.execute(f'''UPDATE Economy SET profit_league = {newValue} WHERE did IS {id}''')
+    database.commit()
+    return
+
 async def ensureUserInEconomy(id):
     entry = await getUserEconomy(id)
     if entry is not None:
         return entry
-    cursor.execute(f'''INSERT INTO Economy (did,bank,lastdaily,coinflips,blackjacks,profit_blackjack,profit_coinflip) 
-    VALUES({id}, 100, 0, 0, 0, 0, 0)''')
+    cursor.execute(f'''INSERT INTO Economy (did,bank,lastdaily,coinflips,blackjacks,profit_blackjack,profit_coinflip,profit_league,profit_valorant) 
+    VALUES({id}, 20, 0, 0, 0, 0, 0,0,0)''')
     database.commit()
-    return [id,100,0,0,0,0,0]
+    return [id,20,0,0,0,0,0,0,0]
 
 async def getUserEconomy(id):
     return cursor.execute(f'SELECT * FROM Economy WHERE did IS {id}').fetchone()
@@ -83,10 +99,18 @@ def generateFailedEmbed(text, author, author_icon):
 async def getDisplayNameFromID(bot, id):
     return (await bot.fetch_user(id)).display_name
 
-def generateBalanceEmbed(name, amount):
+def generateBalanceEmbed(name, balanceEntry):
     embed = discord.Embed(title=f"{name}'s Balance", color=0xebeb34)
     embed.set_footer(text=f'Requested by {name}')
-    embed.add_field(name='Balance',value='£{:.2f}'.format(amount))
+    embed.add_field(name='Balance',value='```yaml\n£{:.2f}\n```'.format(balanceEntry[1]))
+    embed.add_field(name='\u200b',value='\u200b')
+    embed.add_field(name='\u200b',value='\u200b')
+    embed.add_field(name='Blackjack Profit',value='```yaml\n£{:.2f}\n```'.format(balanceEntry[5]))
+    embed.add_field(name='Coinflip Profit',value='```yaml\n£{:.2f}\n```'.format(balanceEntry[6]))
+    embed.add_field(name='\u200b',value='\u200b')
+    embed.add_field(name='League Profit',value='```yaml\n£{:.2f}\n```'.format(balanceEntry[7]))
+    embed.add_field(name='Valorant Profit',value='```yaml\n£{:.2f}\n```'.format(balanceEntry[8]))
+    embed.add_field(name='\u200b',value='\u200b')
     return embed
 
 async def generateBalTopEmbed(eco, author, start, end):
