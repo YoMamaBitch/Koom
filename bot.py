@@ -9,6 +9,7 @@ class KoomBot(commands.Bot):
 
     async def on_ready(self):
         print(f"{self.user} has connected to Discord.")
+        #await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name='the drip.'))
 
     async def close(self):
         await super().close()

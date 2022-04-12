@@ -1,6 +1,6 @@
 from discord.ui import Button,View, Select
 import discord
-from discord import Interaction, SelectMenu, SelectOption
+from discord import ButtonStyle, Interaction, SelectMenu, SelectOption
 
 class ChallengeView(View):
     def __init__(self, challenger, challengee, gachaCog):
@@ -13,8 +13,8 @@ class ChallengeView(View):
         self.challengeeResponse = False
         self.challengerChoice = ''
         self.challengeeChoice = ''
-        style = discord.ButtonStyle.gray
-        self.add_item(Button(style=style, label='Accept', emoji='✅'))
+        self.challengeePicking = True
+        self.add_item(ChallengeButton(label='Accept', emoji='✅'))
         #self.add_item(BlackjackButton(label='Hit',emoji='<:pwese:915016939523407873>',row=0)).add_item(BlackjackButton(label='Stand',emoji='<:8748_gigachad:963015025033904148>',row=0))
 
     async def callback(self, interaction, label):
@@ -38,7 +38,26 @@ class ChallengeView(View):
         self.challengeeResponse = False
         self.challengerResponse = False
 
+    def changeToMentalMaths(self):
+        self.clear_items()
+
+    def changeToChallengeChoice(self):
+        self.clear_items()
+        self.add_item(ChallengeButton(label='Mental Maths', row=0))
+        self.add_item(ChallengeButton(label='Typing', row=0))
+        #self.add_item(ChallengeButton(label='Tic-Tac-Toe', row=1))
+        self.add_item(ChallengeButton(label='Rock Paper Scissors', row=1))
+
     async def interaction_check(self, interaction: Interaction) -> bool:
-        if len(self.children) == 1:
+        if self.challengeePicking:
             return interaction.user.id == self.challengeeId
         return interaction.user.id == self.challengeeId or interaction.user.id == self.challengerId
+    
+class ChallengeButton(Button):
+    def __init__(self, row = 0,label=None, emoji=None, disabled = False):
+        super().__init__(style=discord.ButtonStyle.secondary, label=label, row=row, emoji=emoji, disabled=disabled)
+        
+    
+    async def callback(self, interaction: Interaction):
+        return await self.view.callback(interaction, self.label)
+
