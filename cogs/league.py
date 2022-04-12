@@ -159,7 +159,7 @@ class League(commands.Cog):
         embed_data.remove(None)
         self.activeMatchHistories.append(embed_data)
         await interaction.followup.send(embed=embed, view=view)
-        await interaction.response.send_message(embed=embed,view=view)#
+        await interaction.response.send_message(embed=embed,view=view)
 
     @app_commands.command(name='leaguecurrent', description="Get info about the current game of a player.")
     @app_commands.guilds(discord.Object(817238795966611466))

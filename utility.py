@@ -10,6 +10,14 @@ def secondsToMinSecString(secs) -> str:
     m,s = divmod(secs,60)
     return "{:02d}:{:02d}".format(m,s)
 
+async def addBlackjackProfit(id,amount):
+    await ensureUserInEconomy(id)
+    user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+    newValue = user_data[5] + amount
+    cursor.execute(f'''UPDATE Economy SET profit_blackjack = {newValue} WHERE did IS {id}''')
+    database.commit()
+    return
+
 async def addValorantProfit(id,amount):
     await ensureUserInEconomy(id)
     user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
@@ -42,6 +50,14 @@ async def sendMoneyToId(id,amount):
     await ensureUserInEconomy(id)
     user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
     newValue = user_data[1] + amount
+    cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did IS {id}''')
+    database.commit()
+    return
+
+async def takeMoneyFromId(id,amount):
+    await ensureUserInEconomy(id)
+    user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+    newValue = max(0,user_data[1] - amount)
     cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did IS {id}''')
     database.commit()
     return
