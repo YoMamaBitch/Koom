@@ -20,7 +20,7 @@ class KoomBot(commands.Bot):
                 await self.load_extension(f'cogs.{x[:-3]}')
                 print(f'Loaded: {x[:-3]}')
         #synced = await bot.tree.sync()
-        #synced = await bot.tree.sync(guild=discord.Object(817238795966611466))
+        synced = await bot.tree.sync(guild=discord.Object(817238795966611466))
         #print(synced)
 
 bot = KoomBot()

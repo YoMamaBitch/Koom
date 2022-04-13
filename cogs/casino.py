@@ -1,8 +1,10 @@
+import asyncio
 import discord,secrets, utility, random, datetime, os
 from PIL import Image, ImageDraw, ImageFont
 from discord.ext import commands
-from discord import app_commands
+from discord import Webhook, app_commands
 from blackjack_view import BlackjackView
+from coinflip_view import CoinflipView
 
 class Casino(commands.Cog):
     def __init__(self,bot:commands.Bot)->None:
@@ -10,22 +12,110 @@ class Casino(commands.Cog):
         self.activeBJ = []
         self.activeCoinflips = []
 
-    # @app_commands.command(name='coinflip', description='Start a coinflip match. Other players can enter this with a +/- 10% money difference.')
-    # @app_commands.guilds(discord.Object(817238795966611466))
-    # async def coinflip(self, interaction:discord.Interaction, amount:app_commands.Range[float,1,50], ):
-        
+    @app_commands.command(name='coinflip', description='Start a coinflip match. Other players can enter this with a +/- 5% money difference.')
+    @app_commands.guilds(discord.Object(817238795966611466))
+    async def coinflip(self, interaction:discord.Interaction, amount:app_commands.Range[float,1,50], side:str):
+        if not await utility.checkIfUserHasAmount(interaction.user.id, amount):
+            await interaction.response.send_message("You don't have enough money.")
+            return
+        game_data = {'player1':interaction.user, 'player1Side':side, 'bet':amount, 'complete':False}
+        await utility.takeMoneyFromId(interaction.user.id, amount)
+        self.activeCoinflips.append(game_data)
+        embed = self.generateCoinflipStartEmbed(game_data)
+        view = CoinflipView(game_data, self)
+        await interaction.response.send_message(embed=embed,view=view)
+        msg = await interaction.original_message()
+        game_data['followupId'] = msg.id
+        game_data['followup'] = interaction.followup
 
+    def generateCoinflipStartEmbed(self, game_data):
+        embed = discord.Embed(title='Coinflip Game', color=0x242424, timestamp=datetime.datetime.now())
+        embed.set_footer(text='Started')
+        embed.set_author(name=game_data['player1'].display_name, icon_url=game_data['player1'].display_avatar.url)
+        lowerBound = game_data['bet'] * 0.95
+        higherBound = game_data['bet'] * 1.05
+        game_data['higher'] = higherBound
+        game_data['lower'] = lowerBound
+        player1Coin = '<:valorantcoin:963660425914880050>' if game_data['player1Side'] == 'valorant' else '<:leaguecoin:963660425872957563>'
+        player2Coin = '<:leaguecoin:963660425872957563>' if game_data['player1Side'] == 'valorant' else '<:valorantcoin:963660425914880050>'
+        embed.add_field(name=f"{player1Coin} = {game_data['player1'].display_name}", value="\u200b")
+        embed.add_field(name=f'\u200b', value='\u200b')
+        embed.add_field(name=f'{player2Coin} = ?', value='\u200b')
+        embed.add_field(name='Lower', value=f'```yaml\n£{lowerBound:.2f}\n```')
+        embed.add_field(name='Pot', value=f"```yaml\n£{game_data['bet']:.2f}\n```")
+        embed.add_field(name='Higher', value=f'```yaml\n£{higherBound:.2f}\n```')
+        return embed
 
-    # async def coinflipTimeout(self, game_data):
-    #     self.activeCoinflips.remove(game_data)
+    def generateCoinflipEmbed(self,game_data):
+        embed = discord.Embed(title='Coinflip Starting', color=0x00204f, timestamp=datetime.datetime.now())
+        embed.set_footer(text='Beginning soon')
+        embed.set_author(name=game_data['player1'].display_name, icon_url=game_data['player1'].display_avatar.url)
+        player1Coin = '<:valorantcoin:963660425914880050>' if game_data['player1Side'] == 'valorant' else '<:leaguecoin:963660425872957563>'
+        player2Coin = '<:leaguecoin:963660425872957563>' if game_data['player1Side'] == 'valorant' else '<:valorantcoin:963660425914880050>'
+        embed.add_field(name=f"{player1Coin} = {game_data['player1'].display_name}", value=f"```yaml\n£{game_data['bet']}\n```")
+        embed.add_field(name=f'\u200b', value='\u200b')
+        embed.add_field(name=f"{player2Coin} = {game_data['player2'].display_name}", value=f"```yaml\n£{game_data['player2Bet']}\n```")
+        return embed
+
+    async def coinflipCallback(self,view,game_data):
+        embed = self.generateCoinflipEmbed(game_data)
+        view.clear_items()
+        await game_data['followup'].edit_message(message_id=game_data['followupId'], embed=embed,view=view)
+        await asyncio.sleep(2)
+        player1Chance = game_data['bet'] / (game_data['bet'] + game_data['player2Bet'])
+        randNum = random.randint(1,10000)
+        if 10000 * player1Chance >= randNum:
+            winner = game_data['player1']
+            winningCoin = 'valorantcoin.gif' if game_data['player1Side'] == 'valorant' else 'leaguecoin.gif' 
+        else:
+            winner = game_data['player2']
+            winningCoin = 'leaguecoin.gif' if game_data['player1Side'] == 'valorant' else 'valorantcoin.gif' 
+        gifFile = discord.File(f'localCasinoContent/{winningCoin}')
+        followup : Webhook = game_data['followup']
+        await followup.edit_message(message_id=game_data['followupId'], attachments=[gifFile] ,embed=embed,view=view)
+        await asyncio.sleep(5)
+        embed = self.generateCoinflipWonEmbed(game_data, winner)
+        game_data['complete'] = True
+        jackpot = game_data['bet'] + game_data['player2Bet']
+        await utility.sendMoneyToId(winner.id, jackpot)
+        await followup.edit_message(message_id=game_data['followupId'], embed=embed, attachments=[])
+
+    def generateCoinflipWonEmbed(self, game_data, winner):
+        embed = discord.Embed(title='Coinflip Over', color=0xcf8a13, timestamp=datetime.datetime.now())
+        embed.set_footer(text=f'Winner {winner.display_name}')
+        embed.set_author(name=game_data['player1'].display_name, icon_url=game_data['player1'].display_avatar.url)
+        player1Coin = '<:valorantcoin:963660425914880050>' if game_data['player1Side'] == 'valorant' else '<:leaguecoin:963660425872957563>'
+        player2Coin = '<:leaguecoin:963660425872957563>' if game_data['player1Side'] == 'valorant' else '<:valorantcoin:963660425914880050>'
+        embed.add_field(name=f"{player1Coin} = {game_data['player1'].display_name}", value="\u200b")
+        embed.add_field(name=f'\u200b', value='\u200b')
+        embed.add_field(name=f"{player2Coin} = {game_data['player2'].display_name}", value='\u200b')
+        pot = game_data['bet'] + game_data['player2Bet']
+        embed.add_field(name=f'{winner.display_name} Won £{pot}', value='\u200b',inline=False)
+        return embed
+
+    async def coinflipTimeout(self, game_data):
+        if not game_data['complete']:
+            await utility.sendMoneyToId(game_data['player1'].id, game_data['bet'])
+        self.activeCoinflips.remove(game_data)
+
+    @coinflip.autocomplete('side')
+    async def coinflip_complete(self, interaction : discord.Interaction, current : str):
+        sides = ['valorant','league']
+        return[
+            app_commands.Choice(name=side, value=side)
+            for side in sides if current.lower() in side.lower()
+        ]
 
     @app_commands.command(name='blackjack', description="Start a blackjack game")
-    #@app_commands.guilds(discord.Object(817238795966611466))
+    @app_commands.guilds(discord.Object(817238795966611466))
     async def blackjack(self, interaction:discord.Interaction, amount:app_commands.Range[float,1,50]):
         for x in self.activeBJ:
             if x['discord_id'] == interaction.user.id:
                 await interaction.response.send_message("You're already in a Blackjack game.", ephemeral=True)
                 return
+        if not await utility.checkIfUserHasAmount(interaction.user.id, amount):
+            await interaction.response.send_message("You don't have enough money.")
+            return
         suits = ['diamonds','hearts','spades','clubs']
         deck = {}
         for i in suits:
