@@ -25,13 +25,13 @@ class Gacha(commands.Cog):
         self.skinTiers = self.loadSkinTiers()
         self.activeTrades = []
         self.random = Random()
-        self.spawnChannel = self.bot.get_partial_messageable(id=secrets.testGacha,type=discord.ChannelType.text)
-        #self.spawn_task = asyncio.get_event_loop().create_task(self.spawnSkins())
+        self.spawnChannel = self.bot.get_partial_messageable(id=secrets.gachaSpawnChannel,type=discord.ChannelType.text)
+        self.spawn_task = asyncio.get_event_loop().create_task(self.spawnSkins())
         self.lastClaimer = None
         self.lastClaimTime = 0
 
     @app_commands.command(name='traderemove', description="Remove a skin from your active trade.")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def traderemove(self, interaction :discord.Interaction, skin:str)->None:
         id = interaction.user.id
         trade = None
@@ -60,7 +60,7 @@ class Gacha(commands.Cog):
         await followup.edit_message(message_id=x['followupId'],embed=embed)
 
     @app_commands.command(name='tradeadd', description="Add a skin to your active trade.")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def tradeadd(self, interaction :discord.Interaction, skin:str)->None:
         id = interaction.user.id
         trade = None
@@ -91,7 +91,7 @@ class Gacha(commands.Cog):
         await followup.edit_message(message_id=x['followupId'],embed=embed)
 
     @app_commands.command(name='trade', description="Trade skins with a player.")
-    @app_commands.guilds(discord.Object(817238795966611466))
+   # @app_commands.guilds(discord.Object(817238795966611466))
     async def trade(self, interaction :discord.Interaction, user:discord.User)->None:
         id = interaction.user.id
         cancelTrade = False
@@ -224,7 +224,7 @@ class Gacha(commands.Cog):
         return embed
 
     @app_commands.command(name='slist', description="View your acquired skins.")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def slist(self, interaction :discord.Interaction)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
@@ -235,7 +235,7 @@ class Gacha(commands.Cog):
         await interaction.response.send_message(embed=embed,view=view)
 
     @app_commands.command(name='favourite', description="Favourite a skin to display on your slist.")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def favourite(self, interaction :discord.Interaction, skin:str)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
@@ -254,7 +254,7 @@ class Gacha(commands.Cog):
         await interaction.response.send_message(embed=embed)
         
     @app_commands.command(name='wl',description='Display your wishlisted skin.')
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def wl(self, interaction :discord.Interaction)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
@@ -269,7 +269,7 @@ class Gacha(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='wishlistdel',description='Remove your wishlisted skin.')
-    @app_commands.guilds(discord.Object(817238795966611466))
+   # @app_commands.guilds(discord.Object(817238795966611466))
     async def wishlistdel(self, interaction :discord.Interaction)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
@@ -285,7 +285,7 @@ class Gacha(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='wishlistadd',description='Add a skin to your wishlist. (Max 1)')
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def wishlistadd(self, interaction :discord.Interaction, skin : str)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
@@ -328,7 +328,7 @@ class Gacha(commands.Cog):
             globalClaimedList = utility.cursor.execute('SELECT claimed FROM Gacha WHERE did IS 1').fetchone()[0]
             userClaimedList = utility.cursor.execute('SELECT claimed FROM Gacha WHERE did IS ?',(id,)).fetchone()[0]
             globalClaimedList += f',{self.currentSpawn}'
-            userClaimedList += f'{self.currentSpawn},'
+            userClaimedList += f',{self.currentSpawn}'
             self.claimed.append(self.currentSpawn)
             nextClaim = now + 3600
             utility.cursor.execute('UPDATE Gacha SET claimed = ? WHERE did IS 1',(globalClaimedList,))
@@ -384,8 +384,8 @@ class Gacha(commands.Cog):
 
     async def spawnSkins(self):
         while True:
-            #randNum = self.random.random() * 100
-            randNum = 0
+            randNum = self.random.random() * 100
+            #randNum = 0
             if randNum <= self.SPAWN_CHANCE:
                 skinData = self.getRandomSkin()
                 print(skinData)
@@ -396,7 +396,7 @@ class Gacha(commands.Cog):
                 await self.writeSpawnMessage(skinData)
             else:
                 self.SPAWN_CHANCE += self.SPAWN_INCREMENT
-            await asyncio.sleep(self.random.random() + 6)
+            await asyncio.sleep(self.random.random() * 45 + 25)
 
     def getRandomSkin(self):
         startTime = time.time()

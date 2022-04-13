@@ -36,10 +36,8 @@ class Valorant(commands.Cog):
         with open('localValorantContent/gamemodes.json', 'r', encoding='utf-8') as f:
             self.gamemodes = json.loads(f.readline())['data']
             
-
-    
     @app_commands.command(name='claimvalorant',description='Claim one of your recent 10 Valorant matches. Spike gains are reduced, deathmatch is disabled.')
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def claimvalorant(self, interaction:discord.Interaction, index:app_commands.Range[int,1,10])->None:
         id = interaction.user.id
         author_name = interaction.user.display_name
@@ -105,9 +103,8 @@ class Valorant(commands.Cog):
         utility.database.commit()
         await interaction.response.send_message(embed=embed)
 
-
     @app_commands.command(name='valorantmatches',description='Unlink your valorant account from discord.')
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def valorantmatches(self, interaction:discord.Interaction)->None:
         id = interaction.user.id
         author_name = interaction.user.display_name
@@ -151,6 +148,7 @@ class Valorant(commands.Cog):
     @app_commands.guilds(discord.Object(817238795966611466))
     async def linkvalorant(self, interaction:discord.Interaction)->None:
         id = interaction.user.id
+        id = 219182366915166209
         self.ensureUserInDatabase(id)
         userdata = utility.cursor.execute("SELECT * FROM Valorant WHERE did IS ?",(id,)).fetchone()
         authenticated = userdata[2]
@@ -195,7 +193,7 @@ class Valorant(commands.Cog):
                 continue
             playerStats = round['playerStats']
             for player in playerStats:
-                if player['puuid'] == puuid and player['kills'] >= 5:    
+                if player['puuid'] == puuid and len(player['kills']) >= 5:    
                     aces+=1
         return (plants,defuses,aces)
 
@@ -204,7 +202,7 @@ class Valorant(commands.Cog):
         #Blue always defend first
         gamename = self.getUserName(embed_data['puuid'])
         playercardUrl = self.playerCardUrl + embed_data['playercard'] + '/smallart.png'
-        embed = discord.Embed(title=f'Recent Matches',color=0x1aba9f)
+        embed = discord.Embed(title=f'Recent Matches <a:vibing:747680206734622740>',color=0x1aba9f)
         playerRank = self.getPlayerRankFromMatch(embed_data['matches'][0],embed_data['puuid'])
         embed.set_author(name=f"{embed_data['display_name']}", icon_url=f"{embed_data['display_url']}")
         #embed.set_thumbnail(url=playercardUrl)
@@ -370,7 +368,6 @@ class Valorant(commands.Cog):
         backImage.save(file)
         return file
 
-
     def getEventsInRound(self, round,match, puuid):
         events = []
         playerTeam = self.getPlayerTeamFromMatch(match,puuid)
@@ -415,9 +412,9 @@ class Valorant(commands.Cog):
     async def generateKillEmbed(self,match, event, eventNumberString, puuid):
         embed = discord.Embed(title='Kill', color=0x726ce6)
         embed.set_author(name=f'Event {eventNumberString}')
-        embed.add_field(name='Killer',value=f'```yaml\n{event[2]}\n```', inline=False)
-        embed.add_field(name='Victim', value=f'```yaml\n{event[3]}\n```', inline=False)
-        embed.add_field(name='Weapon',value=f'```yaml\n{event[4]}\n```')
+        embed.add_field(name='Killer <:jettWut:687911504766566400>',value=f'```yaml\n{event[2]}\n```', inline=False)
+        embed.add_field(name='Victim <:wellplayed:589213968036397057>', value=f'```yaml\n{event[3]}\n```', inline=False)
+        embed.add_field(name='<:SansFingerGuns:739592028270362746> Weapon',value=f'```yaml\n{event[4]}\n```')
         timeSinceRoundStart = utility.secondsToMinSecString(int(event[1]/1000))
         embed.add_field(name='Time', value=f'```yaml\n{timeSinceRoundStart}\n```')
         img_filePath = self.generateKillEventImage(match, event, puuid)
@@ -546,15 +543,15 @@ class Valorant(commands.Cog):
         assists = self.getPlayerAssistsFromMatch(match_data,puuid)
         favouriteWeapon = self.getFavouriteWeaponFromMatch(match_data,puuid)
         abilityUses = self.getPlayerAbilityUsageFromMatch(match_data, puuid)
-        embed.add_field(name='Kills',value=f'```yaml\n{kills}\n```')
-        embed.add_field(name='Deaths',value=f'```yaml\n{deaths}\n```')
-        embed.add_field(name='Assists',value=f'```yaml\n{assists}\n```')
-        embed.add_field(name='Fav. Weapon',value=f'```yaml\n{favouriteWeapon}\n```',inline=False)
+        embed.add_field(name='Kills <:POGGERS:461342131584237588>',value=f'```yaml\n{kills}\n```')
+        embed.add_field(name='Deaths <:4117_Jett_Angry:963428412532346920>',value=f'```yaml\n{deaths}\n```')
+        embed.add_field(name='Assists <:8493sagethumbsup:963428406127657060>',value=f'```yaml\n{assists}\n```')
+        embed.add_field(name='Fav. Weapon <:7001cheemsak47gobrr:963428799981166632>',value=f'```yaml\n{favouriteWeapon}\n```',inline=False)
         abilityCodeBlock = f'```yaml\n'
         for key in abilityUses.keys():
             abilityCodeBlock += f'{key} : {abilityUses[key]}\n'
         abilityCodeBlock += '```'
-        embed.add_field(name="Ability Usage",value=abilityCodeBlock,inline=False)
+        embed.add_field(name="Ability Usage <:4275valorantpheonixmyeyes:963428401597800479>",value=abilityCodeBlock,inline=False)
         matchImageFile = self.makeMatchImage(match_data, team, party, puuid)
         file = discord.File(matchImageFile, filename='image.png')
         vKChannel = self.bot.get_channel(secrets.valImageChannel)
@@ -824,7 +821,7 @@ class Valorant(commands.Cog):
         entry = utility.cursor.execute("SELECT * FROM Valorant WHERE did IS ?",(id,)).fetchone()
         if entry is None:
             utility.cursor.execute('''INSERT INTO Valorant 
-            VALUES(?,?,?,?,?,?,?,?)''', (id,None,0,None,None,None,None,None,))
+            VALUES(?,?,?,?,?,?,?,?,?)''', (id,None,0,None,None,None,None,None,''))
             utility.database.commit()
             return [id,None,0,None,None,None,None,None]
         return entry

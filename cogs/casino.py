@@ -10,7 +10,7 @@ class Casino(commands.Cog):
         self.activeBJ = []
 
     @app_commands.command(name='blackjack', description="Start a blackjack game")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def blackjack(self, interaction:discord.Interaction, amount:app_commands.Range[float,1,50]):
         for x in self.activeBJ:
             if x['discord_id'] == interaction.user.id:

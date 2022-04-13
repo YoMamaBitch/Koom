@@ -14,7 +14,7 @@ class Economy(commands.Cog):
         self.topBalances = []
 
     @app_commands.command(name='bal', description='Print your balance')
-    @app_commands.guilds(discord.Object(817238795966611466))
+   # @app_commands.guilds(discord.Object(817238795966611466))
     async def bal(self, interaction:discord.Interaction)->None:
         id = interaction.user.id
         display_name = interaction.user.display_name
@@ -24,7 +24,7 @@ class Economy(commands.Cog):
 
 
     @app_commands.command(name="baltop", description="Print up to the top 100 balances")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def baltop(self, interaction:discord.Interaction)->None:
         view = View(timeout=120.0)
         self.topBalances = cursor.execute('SELECT * FROM Economy ORDER BY bank DESC').fetchall()
@@ -39,7 +39,7 @@ class Economy(commands.Cog):
         
     @app_commands.checks.cooldown(1, 86400)
     @app_commands.command(name="daily",description="Get your daily reward!")
-    @app_commands.guilds(discord.Object(817238795966611466))
+   #@app_commands.guilds(discord.Object(817238795966611466))
     async def daily(self, interaction:discord.Interaction)->None:
         discord_id = interaction.user.id
         entry = await utility.ensureUserInEconomy(interaction.user.id)
@@ -59,7 +59,7 @@ class Economy(commands.Cog):
         database.commit()
 
     @app_commands.command(name="pay",description="Pay someone")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def pay(self,interaction:discord.Interaction,user:discord.User,amount:float)->None:
         author_display = interaction.user.display_name
         author_icon = interaction.user.display_avatar.url

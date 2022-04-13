@@ -9,7 +9,7 @@ class KoomBot(commands.Bot):
 
     async def on_ready(self):
         print(f"{self.user} has connected to Discord.")
-        #await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name='the drip.'))
+        await self.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name='the drip.'))
 
     async def close(self):
         await super().close()
@@ -33,7 +33,8 @@ class KoomBot(commands.Bot):
             if x.endswith('.py'):
                 await self.load_extension(f'cogs.{x[:-3]}')
                 print(f'Loaded: {x[:-3]}')
-        synced = await bot.tree.sync(guild=discord.Object(817238795966611466))
+        synced = await bot.tree.sync()
+        #synced = await bot.tree.sync(guild=discord.Object(817238795966611466))
         #print(synced)
 
 bot = KoomBot()
