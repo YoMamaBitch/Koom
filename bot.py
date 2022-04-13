@@ -1,4 +1,4 @@
-import discord, secrets, os, motor.motor_asyncio, asyncio, sqlite3
+import discord, secrets, os
 from discord.ext import commands
 
 class KoomBot(commands.Bot):
@@ -14,26 +14,12 @@ class KoomBot(commands.Bot):
     async def close(self):
         await super().close()
 
-    @commands.command()
-    async def load(self,ctx, cog):
-        if ctx.author.id is not secrets.keironID:
-            return
-        await self.load_extension(f'cogs.{cog}')
-        await ctx.send(f"Loaded {cog}")
-
-    @commands.command()
-    async def unload(self, ctx, cog):
-        if ctx.author.id is not secrets.keironID:
-            return
-        await self.unload_extension(f'cogs.{cog}')
-        await ctx.send(f"Unloaded {cog}")
-
     async def setup_hook(self):
         for x in os.listdir('./cogs'):
             if x.endswith('.py'):
                 await self.load_extension(f'cogs.{x[:-3]}')
                 print(f'Loaded: {x[:-3]}')
-        synced = await bot.tree.sync()
+        #synced = await bot.tree.sync()
         #synced = await bot.tree.sync(guild=discord.Object(817238795966611466))
         #print(synced)
 

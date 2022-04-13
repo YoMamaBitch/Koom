@@ -8,6 +8,16 @@ class Casino(commands.Cog):
     def __init__(self,bot:commands.Bot)->None:
         self.bot = bot
         self.activeBJ = []
+        self.activeCoinflips = []
+
+    # @app_commands.command(name='coinflip', description='Start a coinflip match. Other players can enter this with a +/- 10% money difference.')
+    # @app_commands.guilds(discord.Object(817238795966611466))
+    # async def coinflip(self, interaction:discord.Interaction, amount:app_commands.Range[float,1,50], ):
+        
+
+
+    # async def coinflipTimeout(self, game_data):
+    #     self.activeCoinflips.remove(game_data)
 
     @app_commands.command(name='blackjack', description="Start a blackjack game")
     #@app_commands.guilds(discord.Object(817238795966611466))
@@ -180,7 +190,8 @@ class Casino(commands.Cog):
             while self.getHandValue(hand) < 17:
                 self.hitHand(hand,deck)
             return
-        self.hitHand(hand,deck)
+        if self.getHandValue(hand) < 17:
+            self.hitHand(hand,deck)
 
     def hitHand(self, hand:list, deck:dict):
         card,value = random.choice(list(deck.items()))
