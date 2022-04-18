@@ -38,7 +38,7 @@ class Economy(commands.Cog):
         await interaction.response.send_message(embed=embed,view=view)
         
     @app_commands.command(name="daily",description="Get your daily reward!")
-   #@app_commands.guilds(discord.Object(817238795966611466))
+    @app_commands.guilds(discord.Object(817238795966611466))
     async def daily(self, interaction:discord.Interaction)->None:
         discord_id = interaction.user.id
         entry = await utility.ensureUserInEconomy(interaction.user.id)
@@ -109,7 +109,7 @@ class Economy(commands.Cog):
         if entry[2] + 86400 < now:
             return [True]
 
-        formatString = utility.secondsToHHMMSS(int(now - entry[2] + 86400))
+        formatString = utility.secondsToHHMMSS(int((entry[2] - now) + 86400))
         return [False, formatString]    
     #### ### ## ### # ## ##
 
