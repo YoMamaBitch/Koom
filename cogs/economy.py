@@ -37,7 +37,6 @@ class Economy(commands.Cog):
         view.add_item(leftBtn).add_item(rightBtn)
         await interaction.response.send_message(embed=embed,view=view)
         
-    @app_commands.checks.cooldown(1, 86400)
     @app_commands.command(name="daily",description="Get your daily reward!")
    #@app_commands.guilds(discord.Object(817238795966611466))
     async def daily(self, interaction:discord.Interaction)->None:
@@ -110,7 +109,7 @@ class Economy(commands.Cog):
         if entry[2] + 86400 < now:
             return [True]
 
-        formatString = utility.secondsToHHMMSS(now - entry[2] + 86400)
+        formatString = utility.secondsToHHMMSS(int(now - entry[2] + 86400))
         return [False, formatString]    
     #### ### ## ### # ## ##
 

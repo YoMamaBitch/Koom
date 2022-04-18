@@ -15,6 +15,13 @@ class Base(commands.Cog):
         await ctx.send(f"Loaded {cog}")
 
     @commands.command()
+    async def sendvideo(self, ctx,filename:str):
+        if ctx.author.id != secrets.keironID:
+            return
+        file = discord.File(fp=filename)
+        await ctx.send(file=file)
+
+    @commands.command()
     async def unload(self, ctx, cog):
         if ctx.author.id != secrets.keironID:
             return

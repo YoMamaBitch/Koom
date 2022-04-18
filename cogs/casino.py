@@ -13,7 +13,7 @@ class Casino(commands.Cog):
         self.activeCoinflips = []
 
     @app_commands.command(name='coinflip', description='Start a coinflip match. Other players can enter this with a +/- 5% money difference.')
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def coinflip(self, interaction:discord.Interaction, amount:app_commands.Range[float,1,50], side:str):
         if not await utility.checkIfUserHasAmount(interaction.user.id, amount):
             await interaction.response.send_message("You don't have enough money.")
@@ -78,6 +78,10 @@ class Casino(commands.Cog):
         game_data['complete'] = True
         jackpot = game_data['bet'] + game_data['player2Bet']
         await utility.sendMoneyToId(winner.id, jackpot)
+        loserid = game_data['player1'].id if winner.id == game_data['player2'].id else game_data['player2'].id
+        loseramount = game_data['bet'] if winner.id == game_data['player2'].id else game_data['player2Bet']
+        await utility.addCoinflipProfit(winner.id, jackpot - loseramount)
+        await utility.addCoinflipProfit(loserid,-loseramount)
         await followup.edit_message(message_id=game_data['followupId'], embed=embed, attachments=[])
 
     def generateCoinflipWonEmbed(self, game_data, winner):
@@ -107,7 +111,8 @@ class Casino(commands.Cog):
         ]
 
     @app_commands.command(name='blackjack', description="Start a blackjack game")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    @app_commands.checks.cooldown(12, 600)
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def blackjack(self, interaction:discord.Interaction, amount:app_commands.Range[float,1,50]):
         for x in self.activeBJ:
             if x['discord_id'] == interaction.user.id:
@@ -116,6 +121,7 @@ class Casino(commands.Cog):
         if not await utility.checkIfUserHasAmount(interaction.user.id, amount):
             await interaction.response.send_message("You don't have enough money.")
             return
+
         suits = ['diamonds','hearts','spades','clubs']
         deck = {}
         for i in suits:
@@ -156,14 +162,6 @@ class Casino(commands.Cog):
                 await interaction.response.edit_message(embed=embed)
                 self.activeBJ.remove(game_data)
                 return
-            self.updateDealer(game_data['dealer'],game_data['deck'], False)
-            if self.getHandValue(game_data['dealer']) > 21:
-                embed = await self.generateBlackJackEmbed(game_data)
-                embed.set_author(name='Dealer Bust! You Win!')
-                embed.set_footer(text=f"You won £{game_data['bet'] * 2}")
-                await interaction.response.edit_message(embed=embed)
-                self.activeBJ.remove(game_data)
-                won = True
         else:
             self.updateDealer(game_data['dealer'],game_data['deck'], True)
             embed = await self.generateBlackJackEmbed(game_data)
@@ -198,18 +196,13 @@ class Casino(commands.Cog):
                 self.activeBJ.remove(game_data)
                 won = True
             else:
-                embed.set_author(name='Same Number of Cards and Same Value, You Draw.')
-                embed.set_footer(text=f"Your bet has been refunded (£{game_data['bet']})")
+                embed.set_author(name='Same Number of Cards and Same Value, Dealer Wins.')
+                embed.set_footer(text=f"You lost £{game_data['bet']}")
                 await interaction.response.edit_message(embed=embed)
                 self.activeBJ.remove(game_data)
-                draw = True
         if won:
             await utility.sendMoneyToId(game_data['discord_id'], game_data['bet'] * 2)
             await utility.addBlackjackProfit(game_data['discord_id'], game_data['bet'] * 2)
-            return
-        if draw:
-            await utility.sendMoneyToId(game_data['discord_id'], game_data['bet'])
-            await utility.addBlackjackProfit(game_data['discord_id'], game_data['bet'])
             return
         embed = await self.generateBlackJackEmbed(game_data)
         await interaction.response.edit_message(embed=embed)
@@ -276,12 +269,9 @@ class Casino(commands.Cog):
         return sum
 
     def updateDealer(self, hand,deck, drawTil17):
-        if drawTil17:
-            while self.getHandValue(hand) < 17:
-                self.hitHand(hand,deck)
-            return
-        if self.getHandValue(hand) < 17:
+        while self.getHandValue(hand) < 17:
             self.hitHand(hand,deck)
+        return
 
     def hitHand(self, hand:list, deck:dict):
         card,value = random.choice(list(deck.items()))

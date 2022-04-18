@@ -130,7 +130,7 @@ class Valorant(commands.Cog):
         await interaction.followup.send(embed=embed,view=view)
 
     @app_commands.command(name='unlinkvalorant',description='Unlink your valorant account from discord.')
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def unlinkvalorant(self, interaction:discord.Interaction)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
@@ -145,10 +145,10 @@ class Valorant(commands.Cog):
         await interaction.response.send_message(content="Your valorant account has been unlinked.", ephemeral=True)
 
     @app_commands.command(name='linkvalorant',description='Link your valorant account to discord using RSO.')
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(600696326287785984))
     async def linkvalorant(self, interaction:discord.Interaction)->None:
         id = interaction.user.id
-        id = 219182366915166209
+       # id = 241716281961742336
         self.ensureUserInDatabase(id)
         userdata = utility.cursor.execute("SELECT * FROM Valorant WHERE did IS ?",(id,)).fetchone()
         authenticated = userdata[2]
