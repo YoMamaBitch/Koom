@@ -81,7 +81,14 @@ def secondsToHHMMSS(secs)->str:
     s = secs
     m,s = divmod(s,60)
     h,m = divmod(m, 60)
-    return "{:.2f}:{:.2f}:{:.2f}".format(h,m,s)
+    return "{:02d}:{:02d}:{:02d}".format(h,m,s)
+
+def secondsToDDHHMMSS(secs)->str:
+    s = secs
+    m,s = divmod(s,60)
+    h,m = divmod(m, 60)
+    d,h = divmod(h,24)
+    return "{:02d}:{:02d}:{:02d}:{:02d}".format(d,h,m,s)
 
 def isValidLeagueRegion(region : str):
     noPrefix = region.removeprefix('#').upper()

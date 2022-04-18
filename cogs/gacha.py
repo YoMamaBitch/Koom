@@ -39,20 +39,45 @@ class Gacha(commands.Cog):
 
     async def resetShop(self):
         while True:
-            refreshTime = utility.cursor.execute('SELECT refreshed WHERE did IS 1').fetchone()[0]
-            if refreshTime > time.time():
+            refreshTime = utility.cursor.execute('SELECT refreshed FROM GachaShop WHERE did IS 1').fetchone()[0]
+            if refreshTime < time.time():
                 self.refillShop()
-                channel = self.bot.get_channel(886389462769217536)
-                await channel.send("Shop refilled")
+                channel = await self.bot.fetch_channel(886389462769217536)
+                embed = discord.Embed(title='Shop Refilled', color=0xc00fdb)
+                await channel.send(embed=embed)
                 now = int(time.time())
                 nextUpdate = now + 604800
                 utility.cursor.execute('UPDATE GachaShop SET refreshed = 0')
                 utility.cursor.execute('UPDATE GachaShop SET refreshed = ? WHERE did IS 1', (nextUpdate,))
                 utility.database.commit()
             await asyncio.sleep(3600)
+
+    @app_commands.command(name='refresh', description="Refresh your weekly shop, this will take £500 from your account.")
+    #@app_commands.guilds(discord.Object(817238795966611466))
+    async def refresh(self, interaction :discord.Interaction)->None:
+        id = interaction.user.id
+        self.ensureUserInDatabase(id)
+        self.updateShoppers()
+        eco = await utility.getUserEconomy(id)
+        bank = eco[1]
+        if bank < 500:
+            await interaction.response.send_message("You don't have enough money to refresh your shop.", ephemeral=True)
+            return
+        thisShopper = utility.cursor.execute('SELECT * FROM GachaShop WHERE did IS ?',(id,)).fetchone()
+        if thisShopper[2] == 1:
+            await interaction.response.send_message("You have already refreshed your shop this week.", ephemeral=True)
+            return
+        self.fillShopForID(id)
+        utility.database.commit()
+        embed = discord.Embed(title='Success', color=0x30d61a)
+        embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+        embed.add_field(name='Refreshed your shop', value='Use /shop to view your new one.')
+        utility.cursor.execute('UPDATE GachaShop SET refreshed = 1 WHERE did IS ?', (id,))
+        await utility.takeMoneyFromId(id, 500)
+        await interaction.response.send_message(embed=embed)
             
     @app_commands.command(name='shop', description="Browse your weekly shop, this can be refreshed once per week for £500.")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def shop(self, interaction :discord.Interaction)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
@@ -63,6 +88,9 @@ class Gacha(commands.Cog):
             utility.database.commit()
         embed = discord.Embed(title='Shop', color=0x0ff207)
         embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+        shopTimer = utility.cursor.execute('SELECT refreshed FROM GachaShop WHERE did IS 1').fetchone()[0]
+        timeleft = utility.secondsToDDHHMMSS(int(shopTimer - time.time()))
+        embed.set_footer(text=f'Next reset in: {timeleft}')
         currentShop = thisShopper[1].split(',')
         canBuy = []
         for skin in currentShop:
@@ -91,7 +119,25 @@ class Gacha(commands.Cog):
             return
         elif label == 'Go back':
             view.enableBuy()
-            await interaction.response.edit_message(view=view)
+            embed = discord.Embed(title='Shop', color=0x0ff207)
+            embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+            shopTimer = utility.cursor.execute('SELECT refreshed FROM GachaShop WHERE did IS 1').fetchone()[0]
+            timeleft = utility.secondsToDDHHMMSS(int(shopTimer - time.time()))
+            embed.set_footer(text=f'Next reset in: {timeleft}')
+            currentShop = view.skinList
+            canBuy = []
+            for skin in currentShop:
+                money = await utility.getUserEconomy(interaction.user.id)
+                money = money[1]
+                tierOfSkin = self.getTierOfSkin(skin)
+                emoji = '✅' if money >= SHOP_PRICES[tierOfSkin-1] else '❌'
+                if emoji == '✅':
+                    canBuy.append(True)
+                else:
+                    canBuy.append(False)
+                embed.add_field(name=f'{skin} {emoji}',value=f'```yaml\n£{SHOP_PRICES[tierOfSkin-1]}\n```',inline=False)
+            view = ShopGachaView(interaction.user.id, self, currentShop, canBuy)
+            await interaction.response.edit_message(embed=embed,view=view)
             return
         elif label == 'Yes':
             view.clear_items()
@@ -649,10 +695,10 @@ class Gacha(commands.Cog):
         return hiddenSkin
 
     def convertSkinToUrl(self, skin):
-        return '_'.join(skin.split(' ')) + '.jpg'
+        return ('_'.join(skin.split(' ')) + '.jpg').replace('/','%25')
 
     def convertUrlToSkin(self,url):
-        return url.replace('_', ' ').replace('.jpg','').replace('%','/')
+        return url.replace('_', ' ').replace('.jpg','').replace('%25','/')
 
     def getTierOfSkin(self, skin):
         for x in range(0,len(self.skinTiers)):
