@@ -4,8 +4,6 @@ from discord.ext import commands
 class KoomBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix='bruh ', intents=discord.Intents.all(), application_id=881586576235315220, case_insensitive=True)
-        #self.mongo = motor.motor_asyncio.AsyncIOMotorClient(str(secrets.mongoKey))
-        #self.db = self.mongo.userdata
 
     async def on_ready(self):
         print(f"{self.user} has connected to Discord.")
@@ -20,7 +18,7 @@ class KoomBot(commands.Bot):
                 await self.load_extension(f'cogs.{x[:-3]}')
                 print(f'Loaded: {x[:-3]}')
         #synced = await bot.tree.sync()
-        synced = await bot.tree.sync(guild=discord.Object(817238795966611466))
+        #synced = await bot.tree.sync(guild=discord.Object(817238795966611466))
         #print(synced)
 
 bot = KoomBot()

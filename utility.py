@@ -10,7 +10,7 @@ cursor : MySQLCursor = cnn.cursor()
 
 async def ping_database():
     while True:
-        asyncio.sleep(59)
+        await asyncio.sleep(59)
         cnn.ping(reconnect=True, attempts=3, delay=2)
 
 asyncio.get_event_loop().create_task(ping_database())
@@ -24,34 +24,38 @@ def secondsToMinSecString(secs) -> str:
 
 async def addCoinflipProfit(id,amount):
     await ensureUserInEconomy(id)
-    user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    user_data = cursor.fetchone()
     newValue = user_data[6] + amount
-    cursor.execute(f'''UPDATE Economy SET profit_coinflip = {newValue} WHERE did IS {id}''')
+    cursor.execute(f'''UPDATE Economy SET profit_coinflip = {newValue} WHERE did = {id}''')
     commit()
     return
 
 
 async def addBlackjackProfit(id,amount):
     await ensureUserInEconomy(id)
-    user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    user_data = cursor.fetchone()    
     newValue = user_data[5] + amount
-    cursor.execute(f'''UPDATE Economy SET profit_blackjack = {newValue} WHERE did IS {id}''')
+    cursor.execute(f'''UPDATE Economy SET profit_blackjack = {newValue} WHERE did = {id}''')
     commit()
     return
 
 async def addValorantProfit(id,amount):
     await ensureUserInEconomy(id)
-    user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    user_data = cursor.fetchone()
     newValue = user_data[8] + amount
-    cursor.execute(f'''UPDATE Economy SET profit_valorant = {newValue} WHERE did IS {id}''')
+    cursor.execute(f'''UPDATE Economy SET profit_valorant = {newValue} WHERE did = {id}''')
     commit()
     return
 
 async def addLeagueProfit(id,amount):
     await ensureUserInEconomy(id)
-    user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    user_data = cursor.fetchone()
     newValue = user_data[7] + amount
-    cursor.execute(f'''UPDATE Economy SET profit_league = {newValue} WHERE did IS {id}''')
+    cursor.execute(f'''UPDATE Economy SET profit_league = {newValue} WHERE did = {id}''')
     commit()
     return
 
@@ -71,21 +75,24 @@ async def ensureUserInEconomy(id):
     return [id,20,0,0,0,0,0,0,0]
 
 async def getUserEconomy(id):
-    return cursor.execute(f'SELECT * FROM Economy WHERE did IS {id}').fetchone()
+    cursor.execute(f'SELECT * FROM Economy WHERE did = {id}')
+    return cursor.fetchone()
 
 async def sendMoneyToId(id,amount):
     await ensureUserInEconomy(id)
-    user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    user_data = cursor.fetchone()
     newValue = user_data[1] + amount
-    cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did IS {id}''')
+    cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did = {id}''')
     commit()
     return
 
 async def takeMoneyFromId(id,amount):
     await ensureUserInEconomy(id)
-    user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    user_data = cursor.fetchone()
     newValue = max(0,user_data[1] - amount)
-    cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did IS {id}''')
+    cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did = {id}''')
     commit()
     return
 
@@ -180,7 +187,7 @@ async def generateBalTopEmbed(eco, author, start, end):
         else:
             balNames += f'{x}. '
         balNames += f'{name}\n'
-        balAmounts += '£{:.2f}\n'.format(amount)
+        balAmounts += '£{:.2f}\n'.format(float(amount))
     embed.add_field(name='User', value=balNames)
     embed.add_field(name="Balance", value=balAmounts)
     return embed

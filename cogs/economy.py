@@ -2,7 +2,7 @@ import discord, secrets, time,random, utility, sqlite3
 from discord import app_commands
 from discord.ext import commands
 from discord.ui import Button, View
-from utility import database, cursor
+from utility import cursor
 
 #MONEY FOR MODAL TO PLAY VIDEO IN CHANNEL USER AT IN X TIME? 
 
@@ -14,7 +14,7 @@ class Economy(commands.Cog):
         self.topBalances = []
 
     @app_commands.command(name='bal', description='Print your balance')
-   # @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def bal(self, interaction:discord.Interaction)->None:
         id = interaction.user.id
         display_name = interaction.user.display_name
@@ -27,7 +27,8 @@ class Economy(commands.Cog):
     #@app_commands.guilds(discord.Object(817238795966611466))
     async def baltop(self, interaction:discord.Interaction)->None:
         view = View(timeout=120.0)
-        self.topBalances = cursor.execute('SELECT * FROM Economy ORDER BY bank DESC').fetchall()
+        cursor.execute('SELECT * FROM Economy ORDER BY bank DESC')
+        self.topBalances = cursor.fetchall()
         embed = await utility.generateBalTopEmbed(self, interaction.user, 0,10)
         leftBtn = utility.BalTopButton(style=discord.ButtonStyle.grey, emoji='⬅️', ecoCog=self, author=interaction.user)
         rightBtn = utility.BalTopButton(style=discord.ButtonStyle.grey, emoji='➡️', ecoCog=self, author=interaction.user)
@@ -38,7 +39,7 @@ class Economy(commands.Cog):
         await interaction.response.send_message(embed=embed,view=view)
         
     @app_commands.command(name="daily",description="Get your daily reward!")
-    @app_commands.guilds(discord.Object(817238795966611466))
+    #@app_commands.guilds(discord.Object(817238795966611466))
     async def daily(self, interaction:discord.Interaction)->None:
         discord_id = interaction.user.id
         entry = await utility.ensureUserInEconomy(interaction.user.id)
@@ -50,8 +51,8 @@ class Economy(commands.Cog):
             await interaction.response.send_message(embed=embed)
             return
         amount = random.randrange(25,50)
-        ##user_data = cursor.execute(f'SELECT * FROM Economy WHERE did IS {discord_id}').fetchone()
-        cursor.execute(f'UPDATE Economy SET lastdaily = {time.time()} WHERE did IS {discord_id}')
+        ##user_data = cursor.execute(f'SELECT * FROM Economy WHERE did = {discord_id}').fetchone()
+        cursor.execute(f'UPDATE Economy SET lastdaily = {time.time()} WHERE did = {discord_id}')
         await self.sendMoneyToId(discord_id, amount)
         embed = utility.generateSuccessEmbed(f"You have received £{amount}", author_display,author_icon)
         await interaction.response.send_message(embed=embed)
@@ -78,10 +79,10 @@ class Economy(commands.Cog):
         database.commit()
 
     async def dbSendMoneyTo(self, user : discord.User, amount : float):
-        cursor.execute(f'SELECT * FROM Economy WHERE did IS {user.id}')
+        cursor.execute(f'SELECT * FROM Economy WHERE did = {user.id}')
         result = cursor.fetchone()
         result[1] += amount
-        cursor.execute(f'UPDATE Economy SET bank = {result[1]} WHERE did IS {user.id}')
+        cursor.execute(f'UPDATE Economy SET bank = {result[1]} WHERE did = {user.id}')
         #await database.update_one({'_uid':user.id}, {'$inc':{'_currency':amount}})
 
     ### Utility Economy ###########################
@@ -94,14 +95,16 @@ class Economy(commands.Cog):
     
     async def sendMoneyToId(self,id,amount):
         await utility.ensureUserInEconomy(id)
-        user_data = cursor.execute(f'''SELECT * FROM Economy WHERE did IS {id}''').fetchone()
+        cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+        user_data = cursor.fetchone()
         newValue = user_data[1] + amount
-        return cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did IS {id}''')
+        return cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did = {id}''')
 
     async def takeMoneyFromId(self,id,amount):
-        user_data = cursor.execute(f'SELECT * FROM Economy WHERE did IS {id}').fetchone()
+        cursor.execute(f'SELECT * FROM Economy WHERE did = {id}')
+        user_data = cursor.fetchone()
         newValue = user_data[1] - amount
-        return cursor.execute(f'UPDATE Economy SET bank = {newValue} WHERE did IS {id}')
+        return cursor.execute(f'UPDATE Economy SET bank = {newValue} WHERE did = {id}')
         
     async def dailyAlreadyClaimed(self, id):
         entry = await utility.getUserEconomy(id)

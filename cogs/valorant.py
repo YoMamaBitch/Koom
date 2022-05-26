@@ -9,12 +9,12 @@ from discord.ext import commands
 from discord import app_commands
 from valorant_view import ValorantMatchView
 
-MONEY_PER_KILL = 0.7
-MONEY_PER_ASSIST = 0.25
-MONEY_PER_PLANT = 0.5
-MONEY_PER_DEFUSE = 0.5
-MONEY_PER_ACE = 2.5
-SPIKE_MULTIPLIER = 0.25
+MONEY_PER_KILL = 1.1
+MONEY_PER_ASSIST = 0.5
+MONEY_PER_PLANT = 1.0
+MONEY_PER_DEFUSE = 1.0
+MONEY_PER_ACE = 30
+SPIKE_MULTIPLIER = 0.3
 UNRATED_MULTIPLIER = 1.0
 COMP_MULTIPLIER = 1.5
 
@@ -47,10 +47,12 @@ class Valorant(commands.Cog):
             await interaction.response.send_message("You have not been authenticated, use /linkvalorant.")
             return
         #await interaction.response.defer(thinking=True)
-        puuid = utility.cursor.execute('SELECT puuid FROM Valorant WHERE did IS ?',(id,)).fetchone()[0]
+        utility.cursor.execute('SELECT puuid FROM Valorant WHERE did = %s',(id,))
+        puuid = utility.cursor.fetchone()[0]
         matchlist = self.watcher.match.matchlist_by_puuid('EU',puuid)['history'][:10]
         match = self.watcher.match.by_id('EU',matchlist[index-1]['matchId'])
-        claimed = cursor.execute("SELECT claimed FROM Valorant WHERE did IS ?",(id,)).fetchone()[0]
+        cursor.execute("SELECT claimed FROM Valorant WHERE did = %s",(id,))
+        claimed = cursor.fetchone()[0]
         claimedMatches = claimed.split('`')
         if matchlist[index-1]['matchId'] in claimedMatches:
             await interaction.response.send_message("You've already claimed that match.", ephemeral=True)
@@ -99,8 +101,8 @@ class Valorant(commands.Cog):
         await utility.addValorantProfit(id,float(sum))
         claimedMatches.append(matchlist[index-1]['matchId'])
         claimed = '`'.join(claimedMatches).removeprefix('`')
-        utility.cursor.execute("UPDATE Valorant SET claimed = ? WHERE did IS ?",(claimed,id,))
-        utility.database.commit()
+        utility.cursor.execute("UPDATE Valorant SET claimed = %s WHERE did = %s",(claimed,id,))
+        utility.commit()
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='valorantmatches',description='Unlink your valorant account from discord.')
@@ -114,7 +116,8 @@ class Valorant(commands.Cog):
             await interaction.response.send_message("You have not been authenticated, use /linkvalorant.")
             return
         await interaction.response.defer(thinking=True)
-        userdata = utility.cursor.execute('SELECT * FROM Valorant WHERE did IS ?',(id,)).fetchone()
+        utility.cursor.execute('SELECT * FROM Valorant WHERE did = %s',(id,))
+        userdata = utility.cursor.fetchone()
         puuid = userdata[3]
         matchlist = self.watcher.match.matchlist_by_puuid('EU', puuid)['history'][:30]
         match1 = self.watcher.match.by_id('EU',matchlist[0]['matchId'])
@@ -134,14 +137,15 @@ class Valorant(commands.Cog):
     async def unlinkvalorant(self, interaction:discord.Interaction)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
-        userdata = utility.cursor.execute("SELECT * FROM Valorant WHERE did IS ?",(id,)).fetchone()
+        utility.cursor.execute("SELECT * FROM Valorant WHERE did = %s",(id,))
+        userdata = utility.cursor.fetchone()
         authenticated = userdata[2]
         if authenticated == 0:
             await interaction.response.send_message("You're already un-authenticated.", ephemeral=True)
             return
         userdata[2] = False
-        utility.cursor.execute("UPDATE Valorant SET authenticated = 0 WHERE did IS ?",(id,))
-        utility.database.commit()
+        utility.cursor.execute("UPDATE Valorant SET authenticated = 0 WHERE did = %s",(id,))
+        utility.commit()
         await interaction.response.send_message(content="Your valorant account has been unlinked.", ephemeral=True)
 
     @app_commands.command(name='linkvalorant',description='Link your valorant account to discord using RSO.')
@@ -150,7 +154,8 @@ class Valorant(commands.Cog):
         id = interaction.user.id
        # id = 241716281961742336
         self.ensureUserInDatabase(id)
-        userdata = utility.cursor.execute("SELECT * FROM Valorant WHERE did IS ?",(id,)).fetchone()
+        utility.cursor.execute("SELECT * FROM Valorant WHERE did = %s",(id,))
+        userdata = utility.cursor.fetchone()
         authenticated = userdata[2]
         if authenticated == 1:
             await interaction.response.send_message("You're already authenticated.", ephemeral=True)
@@ -811,18 +816,19 @@ class Valorant(commands.Cog):
         entry = self.ensureUserInDatabase(id)
         if entry is None:
             utility.cursor.execute('''INSERT INTO Valorant 
-            VALUES(?,?,?,?,?,?,?,?,?)''', (id,None,0,None,None,None,None,None,'',))
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)''', (id,None,0,None,None,None,None,None,'',))
             return False
         if entry[2] == 1:
             return True
         return False
     
     def ensureUserInDatabase(self,id):
-        entry = utility.cursor.execute("SELECT * FROM Valorant WHERE did IS ?",(id,)).fetchone()
+        utility.cursor.execute("SELECT * FROM Valorant WHERE did = %s",(id,))
+        entry = utility.cursor.fetchone()
         if entry is None:
             utility.cursor.execute('''INSERT INTO Valorant 
-            VALUES(?,?,?,?,?,?,?,?,?)''', (id,None,0,None,None,None,None,None,''))
-            utility.database.commit()
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)''', (id,None,0,None,None,None,None,None,''))
+            utility.commit()
             return [id,None,0,None,None,None,None,None]
         return entry
 

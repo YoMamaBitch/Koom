@@ -12,6 +12,15 @@ class Casino(commands.Cog):
         self.activeBJ = []
         self.activeCoinflips = []
 
+
+    # @app_commands.command(name='',description='')
+    # @app_commands.guilds(discord.Object(817238795966611466))
+    # async def cc(self, interaction:discord.Interaction, amount : app_commands.Range[float,1,50]):
+    #     if not await utility.checkIfUserHasAmount(interaction.user.id, amount):
+    #         await interaction.response.send_message("You don't have enough money.")
+    #         return
+        
+
     @app_commands.command(name='coinflip', description='Start a coinflip match. Other players can enter this with a +/- 5% money difference.')
     #@app_commands.guilds(discord.Object(817238795966611466))
     async def coinflip(self, interaction:discord.Interaction, amount:app_commands.Range[float,1,50], side:str):
@@ -167,7 +176,7 @@ class Casino(commands.Cog):
             embed = await self.generateBlackJackEmbed(game_data)
             if self.getHandValue(game_data['dealer']) > 21:
                 embed.set_author(name='Dealer Bust! You Win!')
-                embed.set_footer(text=f"You won £{game_data['bet'] * 2}")
+                embed.set_footer(text=f"You won £{game_data['bet']}")
                 await interaction.response.edit_message(embed=embed)
                 self.activeBJ.remove(game_data)
                 won = True
@@ -191,7 +200,7 @@ class Casino(commands.Cog):
                 return
             elif len(game_data['player']) < len(game_data['dealer']):
                 embed.set_author(name='You Have Less Cards, You Win!')
-                embed.set_footer(text=f"You won £{game_data['bet'] * 2}")
+                embed.set_footer(text=f"You won £{game_data['bet']}")
                 await interaction.response.edit_message(embed=embed)
                 self.activeBJ.remove(game_data)
                 won = True
@@ -246,7 +255,7 @@ class Casino(commands.Cog):
             backImage.paste(card_image, (260 + (cardCount*width), 165), card_image)
             draw.text((345,105), f"{valueOfHand}", (255,255,255), font=font2, stroke_width=1, stroke_fill=(0,0,0))
             cardCount+=1
-        filepath = f"{datetime.datetime.now().strftime('%H-%M-%S')}.png"
+        filepath = f"{datetime.datetime.now().strftime('%H-%M-%S')}{game_data['discord_id']}.png"
         backImage.save(filepath)
         file = discord.File(filepath, filename='board.png')
         vKChannel = self.bot.get_channel(secrets.valImageChannel)

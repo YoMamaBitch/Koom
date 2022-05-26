@@ -1,6 +1,7 @@
 from datetime import datetime
 import difflib
 import discord,secrets, time, asyncio, utility, re
+from mysql.connector.cursor import MySQLCursor
 from random import Random
 from sellskin_view import SellSkinView
 from slist_view import SlistView
@@ -20,7 +21,7 @@ class Gacha(commands.Cog):
         self.bot = bot
         self.claimed = self.loadClaimedList()
         self.SPAWN_CHANCE = ORIGINAL_SPAWN_CHANCE
-        self.SPAWN_INCREMENT = 0.08
+        self.SPAWN_INCREMENT = 0.05
         self.currentSpawn = None
         self.currentSpawnEmbed = None
         self.currentSpawnMessage = None
@@ -37,19 +38,39 @@ class Gacha(commands.Cog):
         self.lastClaimer = None
         self.lastClaimTime = 0
 
+    @commands.command()
+    async def doit(self, ctx):
+        if ctx.user.id != secrets.KeironID:
+            return
+        
+
+    @app_commands.command(name='view', description="View a skin")
+    #@app_commands.guilds(discord.Object(817238795966611466))
+    async def view(self, interaction :discord.Interaction, skin:str)->None:
+        closest_skin = difflib.get_close_matches(skin,self.skinURIs, n=1, cutoff=0.3)[0]
+        if closest_skin == None:
+            await interaction.response.send_message("Couldn't find a skin close to that name.",ephemeral=True)
+            return
+        name = closest_skin.replace('_', ' ').removesuffix('.jpg')
+        embed = discord.Embed(title=f'{name}', color=0xf0e80a)
+        embed.set_image(url=f'{secrets.skinBaseURL}{closest_skin}')
+        await interaction.response.send_message(embed=embed)
+
+
     async def resetShop(self):
         while True:
-            refreshTime = utility.cursor.execute('SELECT refreshed FROM GachaShop WHERE did IS 1').fetchone()[0]
+            utility.cursor.execute('SELECT refreshed FROM GachaShop WHERE did = 1')
+            refreshTime = utility.cursor.fetchone()[0]
             if refreshTime < time.time():
                 self.refillShop()
-                channel = await self.bot.fetch_channel(886389462769217536)
+                channel = await self.bot.fetch_channel(730220911353004063)
                 embed = discord.Embed(title='Shop Refilled', color=0xc00fdb)
                 await channel.send(embed=embed)
                 now = int(time.time())
                 nextUpdate = now + 604800
                 utility.cursor.execute('UPDATE GachaShop SET refreshed = 0')
-                utility.cursor.execute('UPDATE GachaShop SET refreshed = ? WHERE did IS 1', (nextUpdate,))
-                utility.database.commit()
+                utility.cursor.execute('UPDATE GachaShop SET refreshed = %s WHERE did = 1', (nextUpdate,))
+                utility.commit()
             await asyncio.sleep(3600)
 
     @app_commands.command(name='refresh', description="Refresh your weekly shop, this will take £500 from your account.")
@@ -63,16 +84,17 @@ class Gacha(commands.Cog):
         if bank < 500:
             await interaction.response.send_message("You don't have enough money to refresh your shop.", ephemeral=True)
             return
-        thisShopper = utility.cursor.execute('SELECT * FROM GachaShop WHERE did IS ?',(id,)).fetchone()
+        utility.cursor.execute('SELECT * FROM GachaShop WHERE did = %s',(id,))
+        thisShopper = utility.cursor.fetchone()
         if thisShopper[2] == 1:
             await interaction.response.send_message("You have already refreshed your shop this week.", ephemeral=True)
             return
         self.fillShopForID(id)
-        utility.database.commit()
+        utility.commit()
         embed = discord.Embed(title='Success', color=0x30d61a)
         embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
         embed.add_field(name='Refreshed your shop', value='Use /shop to view your new one.')
-        utility.cursor.execute('UPDATE GachaShop SET refreshed = 1 WHERE did IS ?', (id,))
+        utility.cursor.execute('UPDATE GachaShop SET refreshed = 1 WHERE did = %s', (id,))
         await utility.takeMoneyFromId(id, 500)
         await interaction.response.send_message(embed=embed)
             
@@ -82,13 +104,15 @@ class Gacha(commands.Cog):
         id = interaction.user.id
         self.ensureUserInDatabase(id)
         self.updateShoppers()
-        thisShopper = utility.cursor.execute('SELECT * FROM GachaShop WHERE did IS ?',(id,)).fetchone()
+        utility.cursor.execute('SELECT * FROM GachaShop WHERE did = %s',(id,))
+        thisShopper = utility.cursor.fetchone()
         if thisShopper[1] == '' or thisShopper[1] == None:
             self.fillShopForID(id)
-            utility.database.commit()
+            utility.commit()
         embed = discord.Embed(title='Shop', color=0x0ff207)
         embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-        shopTimer = utility.cursor.execute('SELECT refreshed FROM GachaShop WHERE did IS 1').fetchone()[0]
+        utility.cursor.execute('SELECT refreshed FROM GachaShop WHERE did = 1')
+        shopTimer = utility.cursor.fetchone()[0]
         timeleft = utility.secondsToDDHHMMSS(int(shopTimer - time.time()))
         embed.set_footer(text=f'Next reset in: {timeleft}')
         currentShop = thisShopper[1].split(',')
@@ -121,7 +145,8 @@ class Gacha(commands.Cog):
             view.enableBuy()
             embed = discord.Embed(title='Shop', color=0x0ff207)
             embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
-            shopTimer = utility.cursor.execute('SELECT refreshed FROM GachaShop WHERE did IS 1').fetchone()[0]
+            utility.cursor.execute('SELECT refreshed FROM GachaShop WHERE did = 1')
+            shopTimer = utility.cursor.fetchone()[0]
             timeleft = utility.secondsToDDHHMMSS(int(shopTimer - time.time()))
             embed.set_footer(text=f'Next reset in: {timeleft}')
             currentShop = view.skinList
@@ -142,7 +167,8 @@ class Gacha(commands.Cog):
         elif label == 'Yes':
             view.clear_items()
             skin = view.skinList[view.activeSkin]
-            globalClaimList = utility.cursor.execute('SELECT claimed FROM Gacha WHERE did IS 1').fetchone()[0]
+            utility.cursor.execute('SELECT claimed FROM Gacha WHERE did = 1')
+            globalClaimList = utility.cursor.fetchone()[0]
             if skin in globalClaimList:
                 embed=discord.Embed(title='Error',color=0xd91709)
                 embed.add_field(name='\u200b',value='```\nThe skin in your shop has already been claimed.\n```')
@@ -151,10 +177,11 @@ class Gacha(commands.Cog):
             tier = self.getTierOfSkin(skin)
             price = SHOP_PRICES[tier-1] 
             globalClaimList += f',{skin}'
-            userClaimList = utility.cursor.execute('SELECT claimed FROM Gacha WHERE did IS ?', (interaction.user.id,)).fetchone()[0]
+            utility.cursor.execute('SELECT claimed FROM Gacha WHERE did = %s', (interaction.user.id,))
+            userClaimList = utility.cursor.fetchone()[0]
             userClaimList += f',{skin}'
-            utility.cursor.execute('UPDATE Gacha SET claimed = ? WHERE did IS 1',(globalClaimList,))
-            utility.cursor.execute('UPDATE Gacha SET claimed = ? WHERE did IS ?',(userClaimList,interaction.user.id,))
+            utility.cursor.execute('UPDATE Gacha SET claimed = %s WHERE did = 1',(globalClaimList,))
+            utility.cursor.execute('UPDATE Gacha SET claimed = %s WHERE did = %s',(userClaimList,interaction.user.id,))
             await utility.takeMoneyFromId(interaction.user.id, price)
             embed = discord.Embed(title='Success', color=0x00ff15)
             embed.add_field(name=f'Bought {skin} for £{price}', value='\u200b')
@@ -164,16 +191,18 @@ class Gacha(commands.Cog):
 
     def refillShop(self):
         self.updateShoppers()
-        shoppers = utility.cursor.execute('SELECT * FROM GachaShop').fetchall()
+        utility.cursor.execute('SELECT * FROM GachaShop')
+        shoppers = utility.cursor.fetchall()
         for shopper in shoppers:
             if shopper[0] == 1:
                 continue
             self.fillShopForID(shopper[0])
-        utility.database.commit()
+        utility.commit()
             
     def fillShopForID(self, id ):
         nextShop = ''
-        globalClaimList = utility.cursor.execute('SELECT claimed FROM Gacha WHERE did IS 1').fetchone()[0]
+        utility.cursor.execute('SELECT claimed FROM Gacha WHERE did = 1')
+        globalClaimList = utility.cursor.fetchone()[0]
         for _ in range(0,4):
             while True:         
                 success =False           
@@ -181,7 +210,7 @@ class Gacha(commands.Cog):
                 for chance in range(0,len(SHOP_CHANCES)):
                     if ticket < SHOP_CHANCES[chance]:
                         skin = self.random.choice(self.skinTiers[chance])
-                        if skin not in globalClaimList:
+                        if skin not in globalClaimList and skin not in nextShop:
                             success = True
                         else:
                             break
@@ -190,27 +219,78 @@ class Gacha(commands.Cog):
                 if success:
                     break
         nextShop = nextShop.removesuffix(',')
-        utility.cursor.execute('UPDATE GachaShop SET shop = ? WHERE did IS ?', (nextShop, id,))
+        utility.cursor.execute('UPDATE GachaShop SET shop = %s WHERE did = %s', (nextShop, id,))
 
     def updateShoppers(self):
-        gachaUsers = utility.cursor.execute('SELECT * FROM Gacha').fetchall()
-        shopUsers = utility.cursor.execute('SELECT * FROM GachaShop').fetchall()
+        utility.cursor.execute('SELECT * FROM Gacha')
+        gachaUsers = utility.cursor.fetchall()
+        utility.cursor.execute('SELECT * FROM GachaShop')
+        shopUsers = utility.cursor.fetchall()
         for user in gachaUsers:
             found=False
             for shopper in shopUsers:
-                if shopper[0] == int(user[0]):
+                if int(shopper[0]) == int(user[0]):
                     found = True
                     break
             if not found:
-                utility.cursor.execute('INSERT INTO GachaShop VALUES(?,"", 0)', (user[0],))
-        utility.database.commit()
+                utility.cursor.execute('INSERT INTO GachaShop VALUES(%s,"", 0)', (user[0],))
+        utility.commit()
+
+    def generateSellSkinsEmbed(self, skins,sum, author, icon):
+        description = f"Sold {len(skins)} skins for a profit of £{sum}"            
+        embed = discord.Embed(title=f'Sold {len(skins)} Skins', color=0xfcba03, description=description)
+        embed.set_author(name=author, icon_url=icon)
+        return embed
+
+    @app_commands.command(name='sellskins', description="Release skins by index, separate by a comma (,) WARNING: This does not have a confirmation")
+    #@app_commands.guilds(discord.Object(817238795966611466))
+    async def sellskins(self, interaction:discord.Interaction, skinsindices:str)->None:
+        id = interaction.user.id
+        author_name = interaction.user.display_name
+        author_image = interaction.user.display_avatar.url
+        self.ensureUserInDatabase(id)
+        utility.cursor.execute('SELECT * FROM Gacha WHERE did = %s',(id,))
+        userdata = utility.cursor.fetchone()
+        claimed : list = userdata[3].split(',')
+        indices = skinsindices.split(',')
+        for index in indices:
+            try:
+                idx = int(index)
+            except:
+                await interaction.response.send_message("An invalid index was detected.", ephemeral=True)
+                return
+            if int(index) <= 0 or int(index) > len(claimed):
+                await interaction.response.send_message("An invalid index was detected.", ephemeral=True)
+                return
+        sellpool = []
+        for index in indices:
+            sellpool.append(claimed[int(index)-1])
+        for skin in sellpool:
+            claimed.remove(skin)
+        sum = 0
+        for skin in sellpool:
+            tier = self.getTierOfSkin(skin)
+            sum += TIER_SELL_PRICE[tier-1]
+        embed = self.generateSellSkinsEmbed(sellpool,sum, author_name, author_image)
+        await utility.sendMoneyToId(id, sum)
+        utility.cursor.execute('SELECT claimed FROM Gacha WHERE did = 1')
+        totalClaimed = utility.cursor.fetchone()[0]
+        totalClaimedList = totalClaimed.split(',')
+        for skin in sellpool:
+            totalClaimedList.remove(skin)
+        totalClaimed = ','.join(totalClaimedList)
+        utility.cursor.execute('UPDATE Gacha SET claimed = %s WHERE did = 1', (totalClaimed,))
+        utility.cursor.execute('UPDATE Gacha SET claimed = %s WHERE did = %s', (','.join(claimed), id,))
+        utility.commit()
+        await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='sellskin', description="Release a skin and get paid its worth.")
     #@app_commands.guilds(discord.Object(817238795966611466))
     async def sellskin(self, interaction :discord.Interaction, skinname:str)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
-        userdata = utility.cursor.execute('SELECT * FROM Gacha WHERE did IS ?',(id,)).fetchone()
+        utility.cursor.execute('SELECT * FROM Gacha WHERE did = %s',(id,))
+        userdata = utility.cursor.fetchone()
         claimed = userdata[3].split(',')
         closest_skin = difflib.get_close_matches(skinname, claimed, n=1, cutoff=0.25)[0]
         if closest_skin == None:
@@ -237,13 +317,14 @@ class Gacha(commands.Cog):
         if label == 'Sell':
             x[1].remove(x[2])
             value = TIER_SELL_PRICE[self.getTierOfSkin(x[2])-1]
-            totalClaimed = utility.cursor.execute('SELECT claimed FROM Gacha WHERE did IS 1').fetchone()[0]
+            utility.cursor.execute('SELECT claimed FROM Gacha WHERE did = 1')
+            totalClaimed = utility.cursor.fetchone()[0]
             totalClaimedList = totalClaimed.split(',')
             totalClaimedList.remove(x[2])
             totalClaimed = ','.join(totalClaimedList)
             userClaimed = ','.join(x[1])
-            utility.cursor.execute('UPDATE Gacha SET claimed = ? WHERE did IS 1', (totalClaimed,))
-            utility.cursor.execute('UPDATE Gacha SET claimed = ? WHERE did IS ?', (userClaimed,x[0],))
+            utility.cursor.execute('UPDATE Gacha SET claimed = %s WHERE did = 1', (totalClaimed,))
+            utility.cursor.execute('UPDATE Gacha SET claimed = %s WHERE did = %s', (userClaimed,x[0],))
             await utility.sendMoneyToId(x[0], value)
             embed = discord.Embed(title='Successfully Sold', color=0x20e842)
             embed.add_field(name='Turnover', value=f'```diff\n+£{value}\n```')
@@ -272,7 +353,8 @@ class Gacha(commands.Cog):
         if trade == None:
             await interaction.response.send_message("You aren't in an active trade.", ephemeral=True)
             return
-        claimed = utility.cursor.execute('SELECT claimed FROM Gacha WHERE did IS ?',(id,)).fetchone()[0]
+        utility.cursor.execute('SELECT claimed FROM Gacha WHERE did = %s',(id,))
+        claimed = utility.cursor.fetchone()[0]
         claimed = claimed.split(',')
         closest_skin = difflib.get_close_matches(skinname, claimed, n=1,cutoff=0.3)[0]
         if closest_skin == None:
@@ -301,7 +383,8 @@ class Gacha(commands.Cog):
         if trade == None:
             await interaction.response.send_message("You aren't in an active trade.", ephemeral=True)
             return
-        claimed = utility.cursor.execute('SELECT claimed FROM Gacha WHERE did IS ?',(id,)).fetchone()[0]
+        utility.cursor.execute('SELECT claimed FROM Gacha WHERE did = %s',(id,))
+        claimed = utility.cursor.fetchone()[0]
         claimed = claimed.split(',')
         closest_skin = difflib.get_close_matches(skinname, claimed, n=1,cutoff=0.3)[0]
         if closest_skin == None:
@@ -381,8 +464,10 @@ class Gacha(commands.Cog):
         recName = data['recipient'].display_name
         senderList = data['senderOfferings']
         recList = data['recipientOfferings']
-        databaseSender = utility.cursor.execute('SELECT claimed,favourite FROM Gacha WHERE did IS ?',(senderId,)).fetchone()
-        databaseRecipient = utility.cursor.execute('SELECT claimed,favourite FROM Gacha WHERE did IS ?',(recId,)).fetchone()
+        utility.cursor.execute('SELECT (claimed,favourite) FROM Gacha WHERE did = %s',(senderId,))
+        databaseSender = utility.cursor.fetchone()
+        utility.cursor.execute('SELECT (claimed,favourite) FROM Gacha WHERE did = %s',(recId,))
+        databaseRecipient = utility.cursor.fetchone()
         senderFav = databaseSender[1]
         recFav = databaseRecipient[1]
         databaseSender = databaseSender[0].split(',')
@@ -405,9 +490,9 @@ class Gacha(commands.Cog):
         recBody += '\n```'
         senderReturn = ','.join(databaseSender).removesuffix(',')
         recipientReturn = ','.join(databaseRecipient).removesuffix(',')
-        utility.cursor.execute('UPDATE Gacha SET claimed = ?, favourite = ? WHERE did IS ?', (senderReturn,senderFav,senderId,))
-        utility.cursor.execute('UPDATE Gacha SET claimed = ?, favourite = ? WHERE did IS ?', (recipientReturn,recFav,recId,))
-        utility.database.commit()
+        utility.cursor.execute('UPDATE Gacha SET claimed = %s, favourite = %s WHERE did = %s', (senderReturn,senderFav,senderId,))
+        utility.cursor.execute('UPDATE Gacha SET claimed = %s, favourite = %s WHERE did = %s', (recipientReturn,recFav,recId,))
+        utility.commit()
         embed = discord.Embed(title='Trade Complete',color=0x08c21d, timestamp=datetime.now())
         embed.add_field(name=f'{senderName} Sent', value=sendBody)
         embed.add_field(name='\u200b', value='\u200b')
@@ -453,7 +538,8 @@ class Gacha(commands.Cog):
     async def slist(self, interaction :discord.Interaction)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
-        userdata = utility.cursor.execute('SELECT * FROM Gacha WHERE did IS ?',(id,)).fetchone()
+        utility.cursor.execute('SELECT * FROM Gacha WHERE did = %s',(id,))
+        userdata = utility.cursor.fetchone()
         data = {'fav':userdata[1], 'claimed':userdata[3], 'start':0, 'stop':10, 'name':interaction.user.display_name, 'icon':interaction.user.display_avatar.url}
         embed = self.generateSlistEmbed(data)
         view = SlistView(id, data,self)
@@ -464,15 +550,16 @@ class Gacha(commands.Cog):
     async def favourite(self, interaction :discord.Interaction, skin:str)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
-        userdata = utility.cursor.execute('SELECT * FROM Gacha WHERE did IS ?',(id,)).fetchone()
+        utility.cursor.execute('SELECT * FROM Gacha WHERE did = %s',(id,))
+        userdata = utility.cursor.fetchone()
         claimed = userdata[3].split(',')
         closest_skin = difflib.get_close_matches(skin, claimed, n=1, cutoff=0.3)
         if (len(closest_skin) == 0):
             await interaction.response.send_message("Couldn't find a skin close enough to your request.", ephemeral=True)
             return
         closest_skin = closest_skin[0]
-        utility.cursor.execute('UPDATE Gacha SET favourite = ? WHERE did IS ?', (closest_skin, id,))
-        utility.database.commit()
+        utility.cursor.execute('UPDATE Gacha SET favourite = %s WHERE did = %s', (closest_skin, id,))
+        utility.commit()
         embed = discord.Embed(title=f'Favourited {closest_skin}',color=0x3091f2)
         skinurl = self.convertSkinToUrl(closest_skin)
         embed.set_image(url=f'{secrets.skinBaseURL}{skinurl}')
@@ -483,7 +570,8 @@ class Gacha(commands.Cog):
     async def wl(self, interaction :discord.Interaction)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
-        userdata = utility.cursor.execute('SELECT * FROM Gacha WHERE did IS ?',(id,)).fetchone()
+        utility.cursor.execute('SELECT * FROM Gacha WHERE did = %s',(id,))
+        userdata = utility.cursor.fetchone()
         if userdata[2] == '' or userdata[2] == None:
             await interaction.response.send_message("You don't have a wishlisted skin.",ephemeral=True)
             return
@@ -498,12 +586,13 @@ class Gacha(commands.Cog):
     async def wishlistdel(self, interaction :discord.Interaction)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
-        userdata = utility.cursor.execute('SELECT * FROM Gacha WHERE did IS ?',(id,)).fetchone()
+        utility.cursor.execute('SELECT * FROM Gacha WHERE did = %s',(id,))
+        userdata = utility.cursor.fetchone()
         if userdata[2] == '' or userdata[2] == None:
             await interaction.response.send_message("You don't have a wishlisted skin.",ephemeral=True)
             return
-        utility.cursor.execute('UPDATE Gacha SET wishlist = ? WHERE did IS ?',('',id,))
-        utility.database.commit()
+        utility.cursor.execute('UPDATE Gacha SET wishlist = %s WHERE did = %s',('',id,))
+        utility.commit()
         embed = discord.Embed(title='Successfully Removed', color=0xd45613)
         embed.set_author(name=f'{interaction.user.display_name}', icon_url=f'{interaction.user.display_avatar.url}')
         embed.add_field(value=f'Removed {userdata[2]} from your wishlist. <:pepehands:690235036397731990>',name='\u200b')
@@ -514,7 +603,8 @@ class Gacha(commands.Cog):
     async def wishlistadd(self, interaction :discord.Interaction, skin : str)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
-        userdata = utility.cursor.execute('SELECT * FROM Gacha WHERE did IS ?',(id,)).fetchone()
+        utility.cursor.execute('SELECT * FROM Gacha WHERE did = %s',(id,))
+        userdata = utility.cursor.fetchone()
         if userdata[2] != '' and userdata[2] != None:
             await interaction.response.send_message("You can't have more than 1 wishlisted skin.",ephemeral=True)
             return
@@ -523,8 +613,8 @@ class Gacha(commands.Cog):
             await interaction.response.send_message("Couldn't find a skin close enough to your request.", ephemeral=True)
             return
         closest_skin = self.convertUrlToSkin(closest_skin[0])
-        utility.cursor.execute('UPDATE Gacha SET wishlist = ? WHERE did IS ?',(closest_skin,id,))
-        utility.database.commit()
+        utility.cursor.execute('UPDATE Gacha SET wishlist = %s WHERE did = %s',(closest_skin,id,))
+        utility.commit()
         embed = discord.Embed(title='Successfully Added', color=0x15a146)
         embed.set_author(name=f'{interaction.user.display_name}', icon_url=f'{interaction.user.display_avatar.url}')
         embed.add_field(value=f'Added {closest_skin} to your wishlist. <:catOK:878977243278372885>',name='\u200b')
@@ -539,7 +629,8 @@ class Gacha(commands.Cog):
             return
         self.ensureUserInDatabase(id)
         now = int(time.time())
-        userdata = utility.cursor.execute('SELECT * FROM Gacha WHERE did IS ?',(id,)).fetchone()
+        utility.cursor.execute('SELECT * FROM Gacha WHERE did = %s',(id,))
+        userdata = utility.cursor.fetchone()
         nextClaim = userdata[4]
         if nextClaim != 0 and nextClaim > now:
             timeLeftString = utility.secondsToMinSecString(int(nextClaim-now))
@@ -547,24 +638,54 @@ class Gacha(commands.Cog):
             return
         inventory = userdata[3].split(',')
         if self.currentSpawn.lower() == fullGuess.lower():
-            if len(inventory) == 250:
+            invSize = self.getInventorySize(inventory)
+            if invSize >= 150:
                 await ctx.send(f"You don't have enough inventory spaces, {ctx.author.display_name}")
                 return
-            globalClaimedList = utility.cursor.execute('SELECT claimed FROM Gacha WHERE did IS 1').fetchone()[0]
-            userClaimedList = utility.cursor.execute('SELECT claimed FROM Gacha WHERE did IS ?',(id,)).fetchone()[0]
+            utility.cursor.execute('SELECT claimed FROM Gacha WHERE did = 1')
+            globalClaimedList = utility.cursor.fetchone()[0]
+            utility.cursor.execute('SELECT claimed FROM Gacha WHERE did = %s',(id,))
+            userClaimedList = utility.cursor.fetchone()[0]
             globalClaimedList += f',{self.currentSpawn}'
             userClaimedList += f',{self.currentSpawn}'
             self.claimed.append(self.currentSpawn)
             nextClaim = now + 3600
-            utility.cursor.execute('UPDATE Gacha SET claimed = ? WHERE did IS 1',(globalClaimedList,))
-            utility.cursor.execute('UPDATE Gacha SET claimed = ?, next_claim = ? WHERE did IS ?',(userClaimedList,nextClaim,id,))
-            utility.database.commit()
+            utility.cursor.execute('UPDATE Gacha SET claimed = %s WHERE did = 1',(globalClaimedList,))
+            utility.cursor.execute('UPDATE Gacha SET claimed = %s, next_claim = %s WHERE did = %s',(userClaimedList,nextClaim,id,))
+            utility.commit()
             await self.sendClaimSuccessMessage(ctx)
             self.currentSpawn = None
             self.lastClaimer = ctx.author.id
             self.lastClaimTime = now
         else:
             await self.sendClaimFailedMessage(ctx)
+
+    def getInventorySize(self, inventory):
+        sum = 0
+        for skin in inventory:
+            tier = self.getTierOfSkin(skin)
+            if tier == None:
+                continue
+            if tier <= 3:
+                sum += 1
+            elif tier == 4:
+                sum += 2
+            elif tier == 5:
+                sum += 3
+            elif tier == 6:
+                sum += 4
+            elif tier == 7:
+                sum += 20
+        return sum
+
+    def getInventoryValue(self, inventory):
+        sum = 0
+        for skin in inventory:
+            tier = self.getTierOfSkin(skin)
+            if tier is None:
+                print(f"Tier None: Skin {skin}")
+            sum += TIER_SELL_PRICE[tier-1]
+        return sum
 
     async def sendClaimFailedMessage(self,ctx):
         await ctx.message.add_reaction('<a:532214723437920276:963305339573399593>')
@@ -594,16 +715,21 @@ class Gacha(commands.Cog):
         if favourite == '.jpg':
             favourite = 'lol.png'
         favourite = f"{secrets.squareBaseUrl}{favourite}"
-        body = '```ini\n'
+        body = '```md\n'
         for i in range(data['start'],data['stop']):
             if i >= len(skins):
                 break
-            body += f'[{i+1}] {skins[i]}\n'
+            tier = self.getTierOfSkin(skins[i])
+            body += f'<T{tier} {i+1}> {skins[i]}\n'
         body+='```'
         embed = discord.Embed(title='Skin List', color=0xe66f0e)
         embed.set_author(name=data['name'], icon_url=data['icon'])
         embed.add_field(name='\u200b',value=body,inline=False)
-        embed.add_field(name='Total Skins',value=f'```yaml\n{len(skins)}\n```',inline=False)
+        embed.add_field(name='Total Skins',value=f'```yaml\n{len(skins)}\n```')
+        invSize = self.getInventorySize(skins)
+        embed.add_field(name='Total Weight',value=f'```yaml\n{invSize}/150\n```')
+        totalValue = self.getInventoryValue(skins)
+        embed.add_field(name='Total Value', value=f'```yaml\n£{totalValue}\n```')
         embed.set_thumbnail(url=favourite)
         return embed
 
@@ -612,16 +738,17 @@ class Gacha(commands.Cog):
             randNum = self.random.random() * 100
             #randNum = 0
             if randNum < self.SPAWN_CHANCE:
+                #print(f"{randNum} rolled, spawn chance: {self.SPAWN_CHANCE}")
+                self.SPAWN_CHANCE = ORIGINAL_SPAWN_CHANCE
                 skinData = self.getRandomSkin()
                 print(skinData)
                 if skinData == None:
                     print("All skins collected")
                     return
-                self.SPAWN_CHANCE = ORIGINAL_SPAWN_CHANCE
                 await self.writeSpawnMessage(skinData)
             else:
                 self.SPAWN_CHANCE += self.SPAWN_INCREMENT
-            await asyncio.sleep(self.random.random() * 55 + 35)
+            await asyncio.sleep(self.random.random() * 60 + 40)
 
     def getRandomSkin(self):
         startTime = time.time()
@@ -676,7 +803,8 @@ class Gacha(commands.Cog):
         self.currentSpawnMessage = await self.spawnChannel.send(embed=embed)
 
     async def sendMentionMessage(self):
-        user_data = utility.cursor.execute('SELECT * FROM Gacha').fetchall()
+        utility.cursor.execute('SELECT * FROM Gacha')
+        user_data = utility.cursor.fetchall()
         wishlisters = []
         for x in user_data:
             if x[2] == self.currentSpawn:
@@ -732,14 +860,16 @@ class Gacha(commands.Cog):
         return [t1,t2,t3,t4,t5,t6,t7]
 
     def loadClaimedList(self):
-        data = utility.cursor.execute('SELECT claimed FROM Gacha WHERE did IS 1').fetchone()[0]
+        utility.cursor.execute('SELECT claimed FROM Gacha WHERE did = 1')
+        data = utility.cursor.fetchone()[0]
         return data.split(',')
 
     def ensureUserInDatabase(self,id):
-        record = cursor.execute(f'SELECT * FROM Gacha WHERE did IS {id}').fetchone()
+        cursor.execute(f'SELECT * FROM Gacha WHERE did = {id}')
+        record = cursor.fetchone()
         if record == None:
-            cursor.execute(f'''INSERT INTO Gacha VALUES ({id},?,?,?,?,?)''', ('','','',0,0))
-            database.commit()
+            cursor.execute('''INSERT INTO Gacha VALUES ({id},%s,%s,%s,%s,%s)''', ('','','',0,0))
+            utility.commit()
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(Gacha(bot))
