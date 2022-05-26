@@ -6,14 +6,20 @@ from discord.ui import Button
 
 league_content_url = 'https://thebestcomputerscientist.co.uk/league_content/'
 cnn : MySQLConnection = mysql.connector.connect(host=secrets.database_url, database='u687243686_koom_data', user='u687243686_koom', password=secrets.database_password)
-cursor : MySQLCursor = cnn.cursor()
+cursor : MySQLCursor = cnn.cursor(buffered=True)
 
-async def ping_database():
+def execute(operation, params=None):
     while True:
-        await asyncio.sleep(59)
-        cnn.ping(reconnect=True, attempts=3, delay=2)
-
-asyncio.get_event_loop().create_task(ping_database())
+        try:
+            #print("Executing")
+            cursor.execute(operation=operation, params=params)
+            #print("Executed")
+            return True
+        except Exception as e:
+            print(e)
+            cnn.reconnect(attempts=3, delay=2)
+            if not cnn.is_connected():
+                return False
 
 def commit():
     cnn.commit()
@@ -24,38 +30,38 @@ def secondsToMinSecString(secs) -> str:
 
 async def addCoinflipProfit(id,amount):
     await ensureUserInEconomy(id)
-    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    execute(f'''SELECT * FROM Economy WHERE did = {id}''')
     user_data = cursor.fetchone()
     newValue = user_data[6] + amount
-    cursor.execute(f'''UPDATE Economy SET profit_coinflip = {newValue} WHERE did = {id}''')
+    execute(f'''UPDATE Economy SET profit_coinflip = {newValue} WHERE did = {id}''')
     commit()
     return
 
 
 async def addBlackjackProfit(id,amount):
     await ensureUserInEconomy(id)
-    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    execute(f'''SELECT * FROM Economy WHERE did = {id}''')
     user_data = cursor.fetchone()    
     newValue = user_data[5] + amount
-    cursor.execute(f'''UPDATE Economy SET profit_blackjack = {newValue} WHERE did = {id}''')
+    execute(f'''UPDATE Economy SET profit_blackjack = {newValue} WHERE did = {id}''')
     commit()
     return
 
 async def addValorantProfit(id,amount):
     await ensureUserInEconomy(id)
-    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    execute(f'''SELECT * FROM Economy WHERE did = {id}''')
     user_data = cursor.fetchone()
     newValue = user_data[8] + amount
-    cursor.execute(f'''UPDATE Economy SET profit_valorant = {newValue} WHERE did = {id}''')
+    execute(f'''UPDATE Economy SET profit_valorant = {newValue} WHERE did = {id}''')
     commit()
     return
 
 async def addLeagueProfit(id,amount):
     await ensureUserInEconomy(id)
-    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    execute(f'''SELECT * FROM Economy WHERE did = {id}''')
     user_data = cursor.fetchone()
     newValue = user_data[7] + amount
-    cursor.execute(f'''UPDATE Economy SET profit_league = {newValue} WHERE did = {id}''')
+    execute(f'''UPDATE Economy SET profit_league = {newValue} WHERE did = {id}''')
     commit()
     return
 
@@ -69,30 +75,30 @@ async def ensureUserInEconomy(id):
     entry = await getUserEconomy(id)
     if entry is not None:
         return entry
-    cursor.execute(f'''INSERT INTO Economy (did,bank,lastdaily,coinflips,blackjacks,profit_blackjack,profit_coinflip,profit_league,profit_valorant) 
+    execute(f'''INSERT INTO Economy (did,bank,lastdaily,coinflips,blackjacks,profit_blackjack,profit_coinflip,profit_league,profit_valorant) 
     VALUES({id}, 20, 0, 0, 0, 0, 0,0,0)''')
     commit()
     return [id,20,0,0,0,0,0,0,0]
 
 async def getUserEconomy(id):
-    cursor.execute(f'SELECT * FROM Economy WHERE did = {id}')
+    execute(f'SELECT * FROM Economy WHERE did = {id}')
     return cursor.fetchone()
 
 async def sendMoneyToId(id,amount):
     await ensureUserInEconomy(id)
-    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    execute(f'''SELECT * FROM Economy WHERE did = {id}''')
     user_data = cursor.fetchone()
     newValue = user_data[1] + amount
-    cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did = {id}''')
+    execute(f'''UPDATE Economy SET bank = {newValue} WHERE did = {id}''')
     commit()
     return
 
 async def takeMoneyFromId(id,amount):
     await ensureUserInEconomy(id)
-    cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+    execute(f'''SELECT * FROM Economy WHERE did = {id}''')
     user_data = cursor.fetchone()
     newValue = max(0,user_data[1] - amount)
-    cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did = {id}''')
+    execute(f'''UPDATE Economy SET bank = {newValue} WHERE did = {id}''')
     commit()
     return
 

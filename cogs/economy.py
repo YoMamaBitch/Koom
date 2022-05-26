@@ -2,7 +2,6 @@ import discord, secrets, time,random, utility, sqlite3
 from discord import app_commands
 from discord.ext import commands
 from discord.ui import Button, View
-from utility import cursor
 
 #MONEY FOR MODAL TO PLAY VIDEO IN CHANNEL USER AT IN X TIME? 
 
@@ -27,8 +26,8 @@ class Economy(commands.Cog):
     #@app_commands.guilds(discord.Object(817238795966611466))
     async def baltop(self, interaction:discord.Interaction)->None:
         view = View(timeout=120.0)
-        cursor.execute('SELECT * FROM Economy ORDER BY bank DESC')
-        self.topBalances = cursor.fetchall()
+        utility.execute('SELECT * FROM Economy ORDER BY bank DESC')
+        self.topBalances = utility.cursor.fetchall()
         embed = await utility.generateBalTopEmbed(self, interaction.user, 0,10)
         leftBtn = utility.BalTopButton(style=discord.ButtonStyle.grey, emoji='⬅️', ecoCog=self, author=interaction.user)
         rightBtn = utility.BalTopButton(style=discord.ButtonStyle.grey, emoji='➡️', ecoCog=self, author=interaction.user)
@@ -51,12 +50,12 @@ class Economy(commands.Cog):
             await interaction.response.send_message(embed=embed)
             return
         amount = random.randrange(25,50)
-        ##user_data = cursor.execute(f'SELECT * FROM Economy WHERE did = {discord_id}').fetchone()
-        cursor.execute(f'UPDATE Economy SET lastdaily = {time.time()} WHERE did = {discord_id}')
+        ##user_data = utility.execute(f'SELECT * FROM Economy WHERE did = {discord_id}').fetchone()
+        utility.execute(f'UPDATE Economy SET lastdaily = {time.time()} WHERE did = {discord_id}')
         await self.sendMoneyToId(discord_id, amount)
         embed = utility.generateSuccessEmbed(f"You have received £{amount}", author_display,author_icon)
         await interaction.response.send_message(embed=embed)
-        database.commit()
+        utility.commit()
 
     @app_commands.command(name="pay",description="Pay someone")
     #@app_commands.guilds(discord.Object(817238795966611466))
@@ -76,13 +75,13 @@ class Economy(commands.Cog):
         await self.sendMoneyToId(user.id, amount)
         embed = utility.generateSuccessEmbed("You have paid **£{:.2f}** to **{}**".format(amount, user.display_name), author_display, author_icon)
         await interaction.response.send_message(embed=embed)
-        database.commit()
+        utility.commit()
 
     async def dbSendMoneyTo(self, user : discord.User, amount : float):
-        cursor.execute(f'SELECT * FROM Economy WHERE did = {user.id}')
-        result = cursor.fetchone()
+        utility.execute(f'SELECT * FROM Economy WHERE did = {user.id}')
+        result = utility.cursor.fetchone()
         result[1] += amount
-        cursor.execute(f'UPDATE Economy SET bank = {result[1]} WHERE did = {user.id}')
+        utility.execute(f'UPDATE Economy SET bank = {result[1]} WHERE did = {user.id}')
         #await database.update_one({'_uid':user.id}, {'$inc':{'_currency':amount}})
 
     ### Utility Economy ###########################
@@ -95,16 +94,16 @@ class Economy(commands.Cog):
     
     async def sendMoneyToId(self,id,amount):
         await utility.ensureUserInEconomy(id)
-        cursor.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
-        user_data = cursor.fetchone()
+        utility.execute(f'''SELECT * FROM Economy WHERE did = {id}''')
+        user_data = utility.cursor.fetchone()
         newValue = user_data[1] + amount
-        return cursor.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did = {id}''')
+        return utility.execute(f'''UPDATE Economy SET bank = {newValue} WHERE did = {id}''')
 
     async def takeMoneyFromId(self,id,amount):
-        cursor.execute(f'SELECT * FROM Economy WHERE did = {id}')
-        user_data = cursor.fetchone()
+        utility.execute(f'SELECT * FROM Economy WHERE did = {id}')
+        user_data = utility.cursor.fetchone()
         newValue = user_data[1] - amount
-        return cursor.execute(f'UPDATE Economy SET bank = {newValue} WHERE did = {id}')
+        return utility.execute(f'UPDATE Economy SET bank = {newValue} WHERE did = {id}')
         
     async def dailyAlreadyClaimed(self, id):
         entry = await utility.getUserEconomy(id)

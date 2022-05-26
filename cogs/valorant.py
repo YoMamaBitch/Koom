@@ -47,7 +47,7 @@ class Valorant(commands.Cog):
             await interaction.response.send_message("You have not been authenticated, use /linkvalorant.")
             return
         #await interaction.response.defer(thinking=True)
-        utility.cursor.execute('SELECT puuid FROM Valorant WHERE did = %s',(id,))
+        utility.execute('SELECT puuid FROM Valorant WHERE did = %s',(id,))
         puuid = utility.cursor.fetchone()[0]
         matchlist = self.watcher.match.matchlist_by_puuid('EU',puuid)['history'][:10]
         match = self.watcher.match.by_id('EU',matchlist[index-1]['matchId'])
@@ -101,7 +101,7 @@ class Valorant(commands.Cog):
         await utility.addValorantProfit(id,float(sum))
         claimedMatches.append(matchlist[index-1]['matchId'])
         claimed = '`'.join(claimedMatches).removeprefix('`')
-        utility.cursor.execute("UPDATE Valorant SET claimed = %s WHERE did = %s",(claimed,id,))
+        utility.execute("UPDATE Valorant SET claimed = %s WHERE did = %s",(claimed,id,))
         utility.commit()
         await interaction.response.send_message(embed=embed)
 
@@ -116,7 +116,7 @@ class Valorant(commands.Cog):
             await interaction.response.send_message("You have not been authenticated, use /linkvalorant.")
             return
         await interaction.response.defer(thinking=True)
-        utility.cursor.execute('SELECT * FROM Valorant WHERE did = %s',(id,))
+        utility.execute('SELECT * FROM Valorant WHERE did = %s',(id,))
         userdata = utility.cursor.fetchone()
         puuid = userdata[3]
         matchlist = self.watcher.match.matchlist_by_puuid('EU', puuid)['history'][:30]
@@ -137,14 +137,14 @@ class Valorant(commands.Cog):
     async def unlinkvalorant(self, interaction:discord.Interaction)->None:
         id = interaction.user.id
         self.ensureUserInDatabase(id)
-        utility.cursor.execute("SELECT * FROM Valorant WHERE did = %s",(id,))
+        utility.execute("SELECT * FROM Valorant WHERE did = %s",(id,))
         userdata = utility.cursor.fetchone()
         authenticated = userdata[2]
         if authenticated == 0:
             await interaction.response.send_message("You're already un-authenticated.", ephemeral=True)
             return
         userdata[2] = False
-        utility.cursor.execute("UPDATE Valorant SET authenticated = 0 WHERE did = %s",(id,))
+        utility.execute("UPDATE Valorant SET authenticated = 0 WHERE did = %s",(id,))
         utility.commit()
         await interaction.response.send_message(content="Your valorant account has been unlinked.", ephemeral=True)
 
@@ -154,7 +154,7 @@ class Valorant(commands.Cog):
         id = interaction.user.id
        # id = 241716281961742336
         self.ensureUserInDatabase(id)
-        utility.cursor.execute("SELECT * FROM Valorant WHERE did = %s",(id,))
+        utility.execute("SELECT * FROM Valorant WHERE did = %s",(id,))
         userdata = utility.cursor.fetchone()
         authenticated = userdata[2]
         if authenticated == 1:
@@ -815,7 +815,7 @@ class Valorant(commands.Cog):
     def checkIfUserLinked(self,id):
         entry = self.ensureUserInDatabase(id)
         if entry is None:
-            utility.cursor.execute('''INSERT INTO Valorant 
+            utility.execute('''INSERT INTO Valorant 
             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)''', (id,None,0,None,None,None,None,None,'',))
             return False
         if entry[2] == 1:
@@ -823,10 +823,10 @@ class Valorant(commands.Cog):
         return False
     
     def ensureUserInDatabase(self,id):
-        utility.cursor.execute("SELECT * FROM Valorant WHERE did = %s",(id,))
+        utility.execute("SELECT * FROM Valorant WHERE did = %s",(id,))
         entry = utility.cursor.fetchone()
         if entry is None:
-            utility.cursor.execute('''INSERT INTO Valorant 
+            utility.execute('''INSERT INTO Valorant 
             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)''', (id,None,0,None,None,None,None,None,''))
             utility.commit()
             return [id,None,0,None,None,None,None,None]

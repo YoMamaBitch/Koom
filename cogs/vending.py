@@ -24,14 +24,14 @@ class Vending(commands.Cog):
         for x in range(0,len(keys)):
             if keys[x] == item:
                 index = x
-        utility.cursor.execute('SELECT * FROM Vending WHERE did = %s', (id,))
+        utility.execute('SELECT * FROM Vending WHERE did = %s', (id,))
         inventory = utility.cursor.fetchone()
         if inventory[index+1] <= 0:
             await interaction.response.send_message("You can't consume something you have none of.", ephemeral=True)
             return
         value = inventory[index+1]
         value -= 1
-        utility.cursor.execute(f'UPDATE Vending SET {item} = {value} WHERE did = %s', (id,))
+        utility.execute(f'UPDATE Vending SET {item} = {value} WHERE did = %s', (id,))
         utility.commit()
         embed = self.generateConsumeEmbed(author,icon,item)
         await interaction.response.send_message(embed=embed)
@@ -48,7 +48,7 @@ class Vending(commands.Cog):
         author = interaction.user.display_name
         icon = interaction.user.display_avatar.url
         self.ensureUserInDatabase(id)
-        utility.cursor.execute('SELECT * FROM Vending WHERE did = %s', (id,))
+        utility.execute('SELECT * FROM Vending WHERE did = %s', (id,))
         inventory = utility.cursor.fetchone()
         embed =  self.generatePocketEmbed(author,icon, inventory)
         await interaction.response.send_message(embed=embed)
@@ -92,10 +92,10 @@ class Vending(commands.Cog):
             await interaction.response.send_message("You don't have enough money.", ephemeral=True)
             return
         await utility.takeMoneyFromId(id, ITEMS[item])
-        utility.cursor.execute(f'SELECT {item} FROM Vending WHERE did = %s', (id,))
+        utility.execute(f'SELECT {item} FROM Vending WHERE did = %s', (id,))
         amount = utility.cursor.fetchone()[0]
         amount += 1
-        utility.cursor.execute(f'UPDATE Vending SET {item} = %s WHERE did = %s', (amount,id,))
+        utility.execute(f'UPDATE Vending SET {item} = %s WHERE did = %s', (amount,id,))
         utility.commit()
         embed=self.generateBoughtEmbed(author,icon,item)
         await interaction.response.send_message(embed=embed)
@@ -106,10 +106,10 @@ class Vending(commands.Cog):
         return embed
 
     def ensureUserInDatabase(self, id):
-        utility.cursor.execute('SELECT * FROM Vending WHERE did = %s', (id,))
+        utility.execute('SELECT * FROM Vending WHERE did = %s', (id,))
         entry = utility.cursor.fetchone()
         if entry is None:
-            utility.cursor.execute(f'INSERT INTO Vending VALUES ({id},0,0,0,0,0,0,0,0)')
+            utility.execute(f'INSERT INTO Vending VALUES ({id},0,0,0,0,0,0,0,0)')
             utility.commit()
 
     @buyvending.autocomplete('item')
