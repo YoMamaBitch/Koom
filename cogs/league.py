@@ -1,5 +1,5 @@
 from random import randrange
-import discord,secrets, utility, time, mysql.connector
+import discord,secrets, sqlite3, utility, time
 from league_view import LeagueMatchView
 from typing import List
 from utility import *
@@ -8,15 +8,14 @@ from discord.ext import commands
 from discord.ui import Button, View
 from discord import app_commands
 
-MONEY_PER_KILL = 1.0
-MONEY_PER_ASSIST = 0.4
-MONEY_PER_VISION = 0.24
+MONEY_PER_KILL = 0.5
+MONEY_PER_ASSIST = 0.2
+MONEY_PER_VISION = 0.65
 MONEY_PER_TOWER_DAMAGE = 0.001
-MONEY_PER_CS = 0.035
+MONEY_PER_CS = 0.25
 ARAM_MULTIPLIER = 0.5
-FEATURED_MULTIPLIER = 0.35
+FEATURED_MULTIPLIER = 0.75
 SR_MULTIPLIER = 1.0
-RANKED_MULTIPIER = 1.5
 
 class League(commands.Cog):
     def __init__(self,bot:commands.Bot)->None:
@@ -42,7 +41,7 @@ class League(commands.Cog):
                 self.positiveEmotes.append(line)
 
     @app_commands.command(name='claimleague',description="Claim one of your recent 10 league games.")
-    #@app_commands.guilds(discord.Object(817238795966611466))
+   # @app_commands.guilds(discord.Object(817238795966611466))
     async def claimleague(self, interaction:discord.Interaction, index:app_commands.Range[int,1,10])->None:
         id = interaction.user.id
         author = interaction.user.display_name
@@ -54,8 +53,7 @@ class League(commands.Cog):
         if index > 10 or index < 1:
             await interaction.response.send_message("You can't claim that League match.", ephemeral=True)
             return
-        cursor.execute('SELECT * FROM League WHERE did = %s',(id,))
-        userdata = cursor.fetchone()
+        userdata = cursor.execute('SELECT * FROM League WHERE did IS ?',(id,)).fetchone()
         summoner = userdata[1]
         region = summoner.split('#')[1].removesuffix('1').removesuffix('2')
         match_region = self.getMatchRegionFromUserRegion(region)
@@ -67,8 +65,6 @@ class League(commands.Cog):
             multiplier = ARAM_MULTIPLIER
         elif gm == 'FEATURED':
             multiplier = FEATURED_MULTIPLIER
-        elif match_data['queueId'] == 420 or match_data['queueId'] == 440:
-            multiplier = RANKED_MULTIPIER
         else:
             multiplier = SR_MULTIPLIER
         duration = match_data['gameDuration'] / 60
@@ -89,15 +85,15 @@ class League(commands.Cog):
         moneyFromCS = cs * csRatio * MONEY_PER_CS * multiplier
         moneyFromHighest = 0
         if highest is not None:
-            if highest[0] == 'Triples':
-                moneyFromHighest = 3 * highest[1] * multiplier
-            elif highest[0] == 'Quadras':
-                moneyFromHighest = 4* highest[1]* multiplier
-            elif highest[0] == 'Pentas':
-                moneyFromHighest = 5 * highest[1]* multiplier
-        sum = moneyFromKills + moneyFromAssists + moneyFromVision + moneyFromTowerDamage + moneyFromHighest + moneyFromCS
+            if highest[0] == 'Triple':
+                moneyFromHighest = 3
+            elif highest[0] == 'Quadra':
+                moneyFromHighest = 4
+            elif highest[0] == 'Penta':
+                moneyFromHighest = 5
+        sum = moneyFromKills + moneyFromAssists + moneyFromVision + moneyFromTowerDamage + moneyFromHighest
         sum = "{:.2f}".format(sum)
-        embed = discord.Embed(title=f'Claimed £{sum} <:3487jhinstonks4:962099404100223057>', color=0x0bd440, description=f"Multiplier: {multiplier}x")
+        embed = discord.Embed(title=f'Claimed £{sum} <:3487jhinstonks4:962099404100223057>', color=0x0bd440, description="A breakdown is detailed below...")
         embed.set_author(name=player_data['summonerName'], icon_url=f"{self.iconUrl}{player_data['profileIcon']}.png")
         embed.set_thumbnail(url="https://thebestcomputerscientist.co.uk/league_content/friends_icon.png")
         moneyFromKills = "{:.2f}".format(moneyFromKills)
@@ -114,18 +110,17 @@ class League(commands.Cog):
         embed.add_field(name="CS", value=f'```yaml\n{cs} = £{moneyFromCS}\n```')
         if highest is not None:
             embed.add_field(name="Bonus", value=f'```yaml\n{highest[0]} = £{moneyFromHighest}\n```')
-        cursor.execute('SELECT claimed FROM League WHERE did = %s',(id,))
-        claimed = cursor.fetchone()[0]
+        claimed = cursor.execute('SELECT claimed FROM League WHERE did IS ?',(id,)).fetchone()[0]
         claimed_games = claimed.split('`')
         if player_matches_ids[index-1] in claimed_games:
             await interaction.response.send_message("You've already claimed that game >:(", ephemeral=True)
             return
         claimed_games.append(player_matches_ids[index-1])
         claimed = '`'.join(claimed_games).removeprefix('`')
-        cursor.execute("UPDATE League SET claimed = %s WHERE did = %s",(claimed,id,))
+        cursor.execute("UPDATE League SET claimed = ? WHERE did IS ?",(claimed,id,))
         await utility.sendMoneyToId(id, float(sum))
         await utility.addLeagueProfit(id,float(sum))
-        utility.commit()
+        database.commit()
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name='leaguematches',description="List your recent League games.")
@@ -142,8 +137,7 @@ class League(commands.Cog):
             embed= utility.generateLeagueFailedEmbed("Your discord account isn't linked to a league account, link with /linkleague", author, url)
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
-        cursor.execute("SELECT * FROM League WHERE did is %s",(id,))
-        userdata = cursor.fetchone()
+        userdata = cursor.execute("SELECT * FROM League WHERE did is ?",(id,)).fetchone()
         league_name:str = userdata[1]
         league_puuid = userdata[2]
         league_id = userdata[3]
@@ -168,17 +162,16 @@ class League(commands.Cog):
         await interaction.response.send_message(embed=embed,view=view)
 
     @app_commands.command(name='leaguecurrent', description="Get info about the current game of a player.")
-    #@app_commands.guilds(discord.Object(817238795966611466))
+   # @app_commands.guilds(discord.Object(817238795966611466))
     async def leaguecurrent(self, interaction:discord.Interaction, user:discord.User)->None:
         id = user.id
         author = interaction.user.display_name
         url = interaction.user.display_avatar.url
-        # if not self.checkIfUserLinked(id):
-        #     embed= utility.generateLeagueFailedEmbed(text="Your discord account isn't linked to a league account, link with /linkleague", author=author, author_icon=url)
-        #     await interaction.response.send_message(embed=embed, ephemeral=True)
-        #     return
-        cursor.execute('SELECT * FROM League WHERE did = %s',(id,))
-        userdata = cursor.fetchone()
+        if not self.checkIfUserLinked(id):
+            embed= utility.generateLeagueFailedEmbed(text="Your discord account isn't linked to a league account, link with /linkleague", author=author, author_icon=url)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        userdata = cursor.execute('SELECT * FROM League WHERE did IS ?',(id,)).fetchone()
         summoner = userdata[1]
         region = summoner.split('#')[1].removesuffix('1').removesuffix('2')
         currentGame = self.getCurrentGameInfo(region, userdata[3])
@@ -199,8 +192,7 @@ class League(commands.Cog):
             embed= utility.generateLeagueFailedEmbed(text="Your discord account isn't linked to a league account, link with /linkleague", author=author, author_icon=url)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
-        cursor.execute(f'SELECT friends FROM League WHERE did is {id}')
-        friends_list = cursor.fetchone()[0]
+        friends_list = cursor.execute(f'SELECT friends FROM League WHERE did is {id}').fetchone()[0]
         if len(friends_list) == 0:
             await interaction.response.send_message("You have no friends added, add some with /addleague", ephemeral=True)
             return
@@ -217,13 +209,12 @@ class League(commands.Cog):
             embed= utility.generateLeagueFailedEmbed(text="Your discord account isn't linked to a league account, link with /linkleague", author=author, author_icon=url)
             await ctx.send(embed=embed)
             return
-        cursor.execute(f'SELECT friends From League WHERE did = {id}')
-        friends = cursor.fetchone()
+        friends = cursor.execute(f'SELECT friends From League WHERE did IS {id}').fetchone()
         friend_list = friends[0].split('`')
         friend_list.remove(friends_summoner)
         friends = '`'.join(friend_list)   
-        cursor.execute('UPDATE League SET friends = %s WHERE did = %s',(friends, id))
-        utility.commit()
+        cursor.execute('UPDATE League SET friends = ? WHERE did IS ?',(friends, id))
+        database.commit()
         #embed = utility.generateLeagueSuccessEmbed(f"Successfully removed {friends_summoner} from your friend list.", author, url)
         await ctx.send(f"Successfully removed {friends_summoner} from your friend list.")
 
@@ -242,15 +233,13 @@ class League(commands.Cog):
             embed = utility.generateLeagueFailedEmbed(text="Your friend has not linked their league account, link with /linkleague", author=author, author_icon=url)
             await interaction.response.send_message(embed=embed)
             return
-        cursor.execute('SELECT friends From League WHERE did = %s', (id,))
-        friends:str = cursor.fetchone()[0]
+        friends:str = cursor.execute('SELECT friends From League WHERE did IS ?', (id,)).fetchone()[0]
         friend_list = friends.split('`')
-        cursor.execute('SELECT linked_league From League WHERE did = %s',(friend_id,))
-        friends_summoner = cursor.fetchone()
+        friends_summoner = cursor.execute('SELECT linked_league From League WHERE did IS ?',(friend_id,)).fetchone()
         friend_list.remove(friends_summoner)
         friends = '`'.join(friend_list).removeprefix('`')
-        cursor.execute('UPDATE League SET friends = %s WHERE did = %s',(friends, id,))
-        utility.commit()
+        cursor.execute('UPDATE League SET friends = ? WHERE did IS ?',(friends, id,))
+        database.commit()
         embed = utility.generateLeagueSuccessEmbed(f"Successfully removed {friends_summoner} from your friend list.", author, url)[0]
         await interaction.response.send_message(embed=embed)
 
@@ -269,15 +258,13 @@ class League(commands.Cog):
             embed = utility.generateLeagueFailedEmbed(text="Your friend has not linked their league account, link with /linkleague", author=author, author_icon=url)
             await interaction.response.send_message(embed=embed)
             return
-        cursor.execute('SELECT friends From League WHERE did = %s', (id,))
-        friends = cursor.fetchone()[0]
+        friends = cursor.execute('SELECT friends From League WHERE did IS ?', (id,)).fetchone()[0]
         friend_list = friends.split('`')
-        cursor.execute('SELECT linked_league From League WHERE did = %s',(friend_id,))
-        friends_summoner = cursor.fetchone()[0]
+        friends_summoner = cursor.execute('SELECT linked_league From League WHERE did IS ?',(friend_id,)).fetchone()[0]
         friend_list.append(friends_summoner)
         friends = '`'.join(friend_list).removeprefix('`')
-        cursor.execute('UPDATE League SET friends = %s WHERE did = %s',(friends, id,))
-        utility.commit()
+        cursor.execute('UPDATE League SET friends = ? WHERE did IS ?',(friends, id,))
+        database.commit()
         embed = utility.generateLeagueSuccessEmbed(f"Successfully added {friends_summoner} to your friend list.", author, url)
         await interaction.response.send_message(embed=embed)
 
@@ -291,8 +278,8 @@ class League(commands.Cog):
             embed= utility.generateLeagueFailedEmbed("Your discord account isn't linked to a league account, link with /linkleague", display_name, display_icon)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
-        cursor.execute('UPDATE League SET linked_league = %s WHERE did = %s',(None,id))
-        utility.commit()
+        cursor.execute('UPDATE League SET linked_league = ? WHERE did IS ?',(None,id))
+        database.commit()
         embed = utility.generateLeagueSuccessEmbed("Successfully unlinked.", display_name, display_icon)
         await interaction.response.send_message(embed=embed)
         
@@ -314,13 +301,13 @@ class League(commands.Cog):
         summoner = self.watcher.summoner.by_name(converted_region, summonername)
         summonerName = summoner['name'] + '#' + converted_region
         cursor.execute('''UPDATE League SET 
-        linked_league = %s,
-        puuid = %s,
-        id = %s,
-        icon = %s,
-        level = %s
-        WHERE did = %s''',(summonerName,summoner['puuid'],summoner['id'],summoner['profileIconId'],summoner['summonerLevel'],id,))
-        utility.commit()
+        linked_league = ?,
+        puuid = ?,
+        id = ?,
+        icon = ?,
+        level = ?
+        WHERE did IS ?''',(summonerName,summoner['puuid'],summoner['id'],summoner['profileIconId'],summoner['summonerLevel'],id,))
+        database.commit()
         embed = utility.generateLeagueSuccessEmbed(f"Successfully linked {summoner['name']}#{converted_region} to your discord account.", display_name, display_icon)
         await interaction.response.send_message(embed=embed)
 
@@ -335,7 +322,7 @@ class League(commands.Cog):
     ##### LEAGUE UTILITY #######
 
     def getCS(self,player_data):
-        return player_data['totalMinionsKilled']
+        return player_data['neutralMinionsKilled']
 
     def generateCurrentMatchEmbed(self, game_info, id):
         player_data = self.getPlayerDataFromMatch(game_info, id)
@@ -347,7 +334,7 @@ class League(commands.Cog):
         champion = self.getChampNameFromPlayerData(player_data)
         championURL = self.champUrl + champion + '.png'
         icon = self.getIconFromPlayerData(player_data)
-        iconURL = self.iconUrl + str(icon) + '.png'
+        iconURL = self.iconUrl + icon + '.png'
         embed = discord.Embed(title=f'Currently Playing {gm}', color=0xfc4503)
         embed.set_thumbnail(url=championURL)
         summonerName = player_data['summonerName']
@@ -358,7 +345,7 @@ class League(commands.Cog):
         return embed
 
     def getIconFromPlayerData(self, player_data):
-        return player_data['profileIconId']
+        return player_data['profileIcon']
         
     def removeMatchList(self, view):
         for x in self.activeMatchHistories:
@@ -401,8 +388,7 @@ class League(commands.Cog):
             await interaction.response.edit_message(embed=embed,view=embed_data[3])
 
     def generateDetailedMatch(self, embed_data, index):
-        cursor.execute(f"SELECT linked_league FROM League WHERE did = {embed_data[0]}")
-        league_name = cursor.fetchone()[0]
+        league_name = cursor.execute(f"SELECT linked_league FROM League WHERE did IS {embed_data[0]}").fetchone()[0]
         league_name = league_name.split('#')[0]
         game_info = embed_data[4][index]['info']
         player_data = self.getPlayerDataFromMatch(game_info,embed_data[5])
@@ -468,8 +454,7 @@ class League(commands.Cog):
         return '<:what:812713040881385492>'
 
     def getSecondaryRuneTree(self,player_data):
-        perks= player_data['perks']
-        perkSecondaryStyle = perks['perkSubStyle']
+        perkSecondaryStyle = player_data['perks']['styles'][1]['style']
         if perkSecondaryStyle == 8100:
             return "Domination"
         elif perkSecondaryStyle == 8300:
@@ -483,9 +468,7 @@ class League(commands.Cog):
         return '<:press_F:911697562518585344>'
 
     def getPrimaryRune(self,player_data):
-        playersRunes = player_data['perks']
-        ids = playersRunes['perkIds']
-        playersRune = ids[0]
+        playersRune = player_data['perks']['styles'][0]['selections'][0]['perk']
         for tree in self.runesList:
             for slot in tree['slots']:
                 for runes in slot['runes']:
@@ -528,8 +511,7 @@ class League(commands.Cog):
 
     def generateMatchesEmbed(self, embed_data):
         ## MATCH DATA : 0=DID, 1=START, 2=END, 3=VIEW, 4=MATCHES, 5=LEAGUEID, 6=DISPLAYNAME, 7=DISPLAYAVATARURL
-        cursor.execute(f"SELECT linked_league FROM League WHERE did = {embed_data[0]}")
-        league_name:str = cursor.fetchone()[0]
+        league_name:str = cursor.execute(f"SELECT linked_league FROM League WHERE did IS {embed_data[0]}").fetchone()[0]
         league_name = league_name.split('#')[0]
         embed = discord.Embed(title=f"{league_name}'s Matches", color=0x3d36cf, description="These overview stats surmise the last 50 games.")
         embed.set_author(name=f"{embed_data[6]}", icon_url=f'{embed_data[7]}')
@@ -618,11 +600,7 @@ class League(commands.Cog):
         return 'FEATURED'
 
     def getChampNameFromPlayerData(self, player_data):
-        data = self.champList['data']
-        for champ in data:
-            champData = data[champ]
-            if int(champData['key']) == int(player_data['championId']):
-                return data[champ]['id']
+        return player_data['championName']
 
     def getKillsDeathsAssistsFromPlayerData(self, player_data):
         kills = player_data['kills']
@@ -641,8 +619,7 @@ class League(commands.Cog):
         return player_data['win']
 
     def generateFriendsEmbed(self, id, list:List[str], author,url):
-        cursor.execute(f"SELECT linked_league FROM League WHERE did = {id}")
-        league_name:str = cursor.fetchone()[0]
+        league_name:str = cursor.execute(f"SELECT linked_league FROM League WHERE did IS {id}").fetchone()[0]
         league_name = league_name.split('#')[0]
         embed = discord.Embed(title=f"{league_name}'s Friends", color=0xcf3a61)
         embed.set_author(name=f"{author}", icon_url=f'{url}')
@@ -689,17 +666,12 @@ class League(commands.Cog):
         return None 
 
     def getCurrentGameInfo(self, region, id):
-        matchRegion = self.getSpectatorRegionFromUserRegion(region)
+        matchRegion = self.getMatchRegionFromUserRegion(region)
         try:
             matchInfo = self.watcher.spectator.by_summoner(matchRegion, id)
         except:
             return None
         return matchInfo
-
-    def getSpectatorRegionFromUserRegion(self, region):
-        if region == 'KR' or region == 'RU':
-            return region
-        return region + '1'
 
     def getMatchRegionFromUserRegion(self, region):
         asian = ['OC','JP','KR']
@@ -727,18 +699,16 @@ class League(commands.Cog):
 
     def checkIfUserLinked(self, id):
         self.ensureUserInDatabase(id)
-        cursor.execute(f'SELECT * FROM League WHERE did = {id}')
-        record = cursor.fetchone()
+        record = cursor.execute(f'SELECT * FROM League WHERE did IS {id}').fetchone()
         if record[1] == None:
             return False
         return True
 
     def ensureUserInDatabase(self,id):
-        cursor.execute(f'SELECT * FROM League WHERE did = {id}')
-        record = cursor.fetchone()
+        record = cursor.execute(f'SELECT * FROM League WHERE did IS {id}').fetchone()
         if record == None:
-            cursor.execute(f'''INSERT INTO League VALUES ({id},%s,%s,%s,%s,%s,%s,%s)''', (None,None,None,None,"",None,""))
-            utility.commit()
+            cursor.execute(f'''INSERT INTO League VALUES ({id},?,?,?,?,?,?,?)''', (None,None,None,None,"",None,""))
+            database.commit()
 
     ############################
 
