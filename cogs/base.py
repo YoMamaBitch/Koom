@@ -31,6 +31,18 @@ class Base(commands.Cog):
         await self.bot.unload_extension(f'cogs.{cog}')
         await ctx.send(f"Unloaded {cog}")
 
+    @commands.command()
+    async def begin(self, ctx):
+        guild : discord.Guild = ctx.guild
+        channel = await guild.fetch_channel(623264928937279499)
+        counter = 0
+        async for message in channel.history(limit=None):
+            #if message.author.id == 496369962311614464:
+            counter +=1
+            with open('raw.txt','a', encoding='utf-8') as f:
+                f.write(message.content + "\n")
+        print(f"Messages Scraped: {counter}")
+
     @app_commands.command(name='patchnote',description="Sends a patch note to the specified channel")
     @app_commands.guilds(discord.Object(817238795966611466))
     async def patchnote(self, interaction:discord.Interaction, channelid:str, title:str, content:str)->None:

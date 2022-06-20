@@ -4,3 +4,11 @@ secrets.py
 database.sqlite
 database.sqlite-journal
 wasteland
+raw.txt
+__pycache__/utility.cpython-310.pyc
+cogs/__pycache__/base.cpython-310.pyc
+cogs/__pycache__/casino.cpython-310.pyc
+cogs/__pycache__/cycle.cpython-310.pyc
+cogs/__pycache__/gacha.cpython-310.pyc
+__pycache__/utility.cpython-310.pyc
+cogs/__pycache__/gacha.cpython-310.pyc

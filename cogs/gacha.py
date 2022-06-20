@@ -14,12 +14,13 @@ from utility import *
 ORIGINAL_SPAWN_CHANCE = 0.3
 TIER_SELL_PRICE = [2.5,6,15,40,100,500,4000]
 SHOP_PRICES = [250,750,1250,2500,5000]
-SHOP_CHANCES = [4500,7000,8700,9700,10001]
+SHOP_CHANCES = [7000,8700,9700,10001]
 
 class Gacha(commands.Cog):
     def __init__(self,bot:commands.Bot)->None:
         self.bot = bot
         self.claimed = self.loadClaimedList()
+        self.duplicates = self.loadDuplicates()
         self.SPAWN_CHANCE = ORIGINAL_SPAWN_CHANCE
         self.SPAWN_INCREMENT = 0.05
         self.currentSpawn = None
@@ -43,6 +44,13 @@ class Gacha(commands.Cog):
         if ctx.user.id != secrets.KeironID:
             return
         
+    # @app_commands.command(name='copy',description="Copy a skin for £ equal to it's rarity")
+    # async def copy(self, interaction:discord.Interaction, skin:str)->None:
+    #     closest_skin = difflib.get_close_matches(skin,self.skinURIs, n=1, cutoff=0.3)[0]
+    #     if closest_skin == None:
+    #         await interaction.response.send_message("Couldn't find a skin close to that name.",ephemeral=True)
+    #         return
+    #     name = closest_skin.replace('_', ' ').removesuffix('.jpg')
 
     @app_commands.command(name='view', description="View a skin")
     #@app_commands.guilds(discord.Object(817238795966611466))
@@ -55,7 +63,6 @@ class Gacha(commands.Cog):
         embed = discord.Embed(title=f'{name}', color=0xf0e80a)
         embed.set_image(url=f'{secrets.skinBaseURL}{closest_skin}')
         await interaction.response.send_message(embed=embed)
-
 
     async def resetShop(self):
         while True:
@@ -464,6 +471,8 @@ class Gacha(commands.Cog):
         recName = data['recipient'].display_name
         senderList = data['senderOfferings']
         recList = data['recipientOfferings']
+        senderList = senderList
+        recList = recList
         utility.execute('SELECT (claimed,favourite) FROM Gacha WHERE did = %s',(senderId,))
         databaseSender = utility.cursor.fetchone()
         utility.execute('SELECT (claimed,favourite) FROM Gacha WHERE did = %s',(recId,))
@@ -642,6 +651,9 @@ class Gacha(commands.Cog):
             if invSize >= 150:
                 await ctx.send(f"You don't have enough inventory spaces, {ctx.author.display_name}")
                 return
+            if self.currentSpawn in inventory:
+                await ctx.send(f"You can't have more than 1 copy of a skin, {ctx.author.display_name}")
+                return
             utility.execute('SELECT claimed FROM Gacha WHERE did = 1')
             globalClaimedList = utility.cursor.fetchone()[0]
             utility.execute('SELECT claimed FROM Gacha WHERE did = %s',(id,))
@@ -771,7 +783,7 @@ class Gacha(commands.Cog):
                 skin =  self.random.choice(self.skinTiers[5])
             else:
                 skin =  self.random.choice(self.skinTiers[6])
-            if skin not in self.claimed:
+            if skin in self.duplicates or skin not in self.claimed:
                 return skin
 
     async def writeSpawnMessage(self,skin):
@@ -859,6 +871,11 @@ class Gacha(commands.Cog):
                 t7.append(skin)
         return [t1,t2,t3,t4,t5,t6,t7]
 
+    def loadDuplicates(self):
+        utility.execute('SELECT claimed FROM Gacha WHERE did = 2')
+        data = utility.cursor.fetchone()[0]
+        return data.split(',')
+
     def loadClaimedList(self):
         utility.execute('SELECT claimed FROM Gacha WHERE did = 1')
         data = utility.cursor.fetchone()[0]
@@ -868,7 +885,7 @@ class Gacha(commands.Cog):
         utility.execute(f'SELECT * FROM Gacha WHERE did = {id}')
         record = cursor.fetchone()
         if record == None:
-            utility.execute('''INSERT INTO Gacha VALUES ({id},%s,%s,%s,%s,%s)''', ('','','',0,0))
+            utility.execute('''INSERT INTO Gacha VALUES (%s,%s,%s,%s,%s,%s)''', (id,'','','',0,0))
             utility.commit()
 
 async def setup(bot: commands.Bot) -> None:
