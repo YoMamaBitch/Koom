@@ -68,6 +68,8 @@ class Music(commands.Cog):
 
     @commands.command()
     async def skip(self, ctx):
+        if self.loop:
+            self.loop = not self.loop
         if self.reachedEnd:
             await self.sendEndOfQueue(ctx)           
             return
